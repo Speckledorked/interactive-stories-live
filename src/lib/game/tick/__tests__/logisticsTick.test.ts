@@ -417,3 +417,50 @@ describe('tickLogistics (DB handler)', () => {
     expect(prisma.supplyRoute.update).not.toHaveBeenCalled()
   })
 })
+
+describe('decideExtraction — condition scaling and ghost-town cutoff', () => {
+  const base = { locationId: 'loc1', resourceSlots: ['ore', 'lumber'], ownerFactionId: 'f1' }
+  // Two slots at the per-slot gain of 2: full yield is 4. A lone owned
+  // location is self-sufficient, so no route is needed in these tests.
+
+  it('DAMAGED ground (conditionScore < 50) yields half', () => {
+    const result = decideExtraction([{ ...base, conditionScore: 49 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 2 }])
+  })
+
+  it('STABLE ground (conditionScore 50) still yields full — the DAMAGED boundary is exclusive', () => {
+    const result = decideExtraction([{ ...base, conditionScore: 50 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 4 }])
+  })
+
+  it('RUINED ground (conditionScore < 25) yields a quarter', () => {
+    const result = decideExtraction([{ ...base, conditionScore: 24 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 1 }])
+  })
+
+  it('conditionScore 25 is DAMAGED, not RUINED — the RUINED boundary is exclusive', () => {
+    const result = decideExtraction([{ ...base, conditionScore: 25 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 2 }])
+  })
+
+  it('ABANDONED ground (conditionScore 0) yields nothing, but 1 is RUINED and still yields a quarter', () => {
+    expect(decideExtraction([{ ...base, conditionScore: 0 }], [])).toEqual([])
+    const result = decideExtraction([{ ...base, conditionScore: 1 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 1 }])
+  })
+
+  it('a tracked population of 10 or fewer is a ghost town — no yield', () => {
+    expect(decideExtraction([{ ...base, population: 10 }], [])).toEqual([])
+    expect(decideExtraction([{ ...base, population: 0 }], [])).toEqual([])
+  })
+
+  it('a tracked population of 11 still works the slots', () => {
+    const result = decideExtraction([{ ...base, population: 11 }], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 4 }])
+  })
+
+  it('untracked population and condition keep the legacy full yield', () => {
+    const result = decideExtraction([base], [])
+    expect(result).toEqual([{ locationId: 'loc1', factionId: 'f1', resourceGain: 4 }])
+  })
+})

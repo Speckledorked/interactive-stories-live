@@ -368,6 +368,13 @@ export interface AmbitionOutcome {
 const SUCCESS_FLOOR = 40
 const SUCCESS_CEILING = 90
 const SUCCESS_STAT_WEIGHT = 0.5
+// When the ambition's goal has drifted off the faction's LIVE goal by
+// resolution time (see ambitionResolution.ts) the faction's heart isn't
+// fully in it — the project resolves with a harder path to success, this
+// many points off the chance before the success band clamps it. The
+// floor/ceiling are unchanged: drift widens the failure band inside them,
+// it doesn't move them.
+const GOAL_DRIFT_SUCCESS_PENALTY = 15
 
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideAmbitionOutcome(input: {
@@ -379,9 +386,21 @@ export function decideAmbitionOutcome(input: {
   military: number
   /** Only meaningful for DESTABILIZE_RIVAL — the rival this ambition is aimed at, if one was on record when it was committed to. */
   targetFactionName?: string
+  /**
+   * Whether the ambition's goal drifted off the faction's LIVE goal by
+   * resolution time — when true, successChance drops by
+   * GOAL_DRIFT_SUCCESS_PENALTY before clamping. Defaults false (absent
+   * flag = no drift), keeping every existing caller untouched.
+   */
+  goalDriftedMidClock?: boolean
 }): AmbitionOutcome {
   const relevantStat = input.goal === 'EXPAND' || input.goal === 'DESTABILIZE_RIVAL' ? input.military : input.resources
-  const successChance = clamp(SUCCESS_FLOOR + relevantStat * SUCCESS_STAT_WEIGHT, SUCCESS_FLOOR, SUCCESS_CEILING)
+  const baseChance = clamp(SUCCESS_FLOOR + relevantStat * SUCCESS_STAT_WEIGHT, SUCCESS_FLOOR, SUCCESS_CEILING)
+  const successChance = clamp(
+    input.goalDriftedMidClock ? baseChance - GOAL_DRIFT_SUCCESS_PENALTY : baseChance,
+    SUCCESS_FLOOR,
+    SUCCESS_CEILING
+  )
   const roll = stableHash(`${input.factionId}:${input.clockId}`) % 100
   const success = roll < successChance
 

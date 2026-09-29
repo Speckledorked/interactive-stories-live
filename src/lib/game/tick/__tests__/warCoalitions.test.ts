@@ -719,4 +719,134 @@ describe('tickWars coalitions', () => {
 
     expect(prisma.war.create).not.toHaveBeenCalled()
   })
+
+  // The defaulted-debt declaration block is recency-scoped now, not a
+  // permanent brand: these pin the handler's mapping from FactionDebt
+  // rows (with their turnResolved) to the pure gate's defaultedTurnsAgo.
+  describe('defaulted-debt declaration block recency (handler wiring)', () => {
+    function mockDeclarationPair() {
+      const attacker = makeFaction('att-a', { military: 80, ties: { 'def-a': { type: 'RIVAL', since: 1 } } })
+      const defender = makeFaction('def-a', { military: 80, ties: { 'att-a': { type: 'RIVAL', since: 1 } } })
+      vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([attacker, defender] as any)
+      // Persistent (not once): resolveWarProgress's supply snapshot reads
+      // locations before declareNewWars does.
+      vi.mocked(prisma.location.findMany).mockResolvedValue([
+        { id: 'loc-1', name: 'The Keep', ownerFactionId: 'def-a', isContested: true },
+      ] as any)
+      // The dovish-leader test above persists an nPC mock that would trip
+      // the ambition gate before the defaulted gate is ever reached —
+      // these tests need a leaderless (neutral) read.
+      vi.mocked(prisma.nPC.findMany).mockResolvedValue([])
+    }
+
+    it('still blocks when the DEFAULTED row has a NULL turnResolved (unknown default date = block in force, #418)', async () => {
+      vi.mocked(prisma.war.findMany).mockResolvedValue([]) // no active or prior wars
+      mockDeclarationPair()
+      vi.mocked(prisma.factionDebt.findMany).mockResolvedValue([{ debtorFactionId: 'att-a', turnResolved: null }] as any)
+
+      const result = await tickWars(baseCtx({ turnNumber: simTurn(20) }))
+
+      expect(prisma.war.create).not.toHaveBeenCalled()
+      expect(result.changes.some((c) => c.field === 'warDeclared')).toBe(false)
+    })
+
+    it('blocks when the most recent default was exactly 15 turns ago', async () => {
+      vi.mocked(prisma.war.findMany).mockResolvedValue([])
+      mockDeclarationPair()
+      vi.mocked(prisma.factionDebt.findMany).mockResolvedValue([{ debtorFactionId: 'att-a', turnResolved: 5 }] as any)
+
+      const result = await tickWars(baseCtx({ turnNumber: simTurn(20) }))
+
+      expect(prisma.war.create).not.toHaveBeenCalled()
+      expect(result.changes.some((c) => c.field === 'warDeclared')).toBe(false)
+    })
+
+    it('declares once the most recent default is 16 turns old — the stale default is forgiven', async () => {
+      vi.mocked(prisma.war.findMany).mockResolvedValue([])
+      mockDeclarationPair()
+      vi.mocked(prisma.factionDebt.findMany).mockResolvedValue([{ debtorFactionId: 'att-a', turnResolved: 4 }] as any)
+      vi.mocked(prisma.war.create).mockResolvedValueOnce({ id: 'new-war-1' } as any)
+
+      const result = await tickWars(baseCtx({ turnNumber: simTurn(20) }))
+
+      expect(prisma.war.create).toHaveBeenCalled()
+      expect(result.changes.some((c) => c.field === 'warDeclared' && c.entityId === 'att-a')).toBe(true)
+    })
+
+    it('the freshest default sets the clock: a 3-turn-old default blocks even beside a 30-turn-old one', async () => {
+      vi.mocked(prisma.war.findMany).mockResolvedValue([])
+      mockDeclarationPair()
+      vi.mocked(prisma.factionDebt.findMany).mockResolvedValue([
+        { debtorFactionId: 'att-a', turnResolved: -10 }, // 30 turns ago: forgiven on its own
+        { debtorFactionId: 'att-a', turnResolved: 17 }, // 3 turns ago: still in force
+      ] as any)
+
+      const result = await tickWars(baseCtx({ turnNumber: simTurn(20) }))
+
+      expect(prisma.war.create).not.toHaveBeenCalled()
+      expect(result.changes.some((c) => c.field === 'warDeclared')).toBe(false)
+    })
+  })
+
+  // The per-participant attrition writes go out via faction.update with no
+  // WorldChange — npcDispositionTick's treasury-collapse classifier reads
+  // the faction-event query, so war-driven LOW transitions were invisible
+  // to it. One MINOR/insignificant resources change per participant fixes
+  // the read without spamming history or rumors.
+  it('emits one faction.resources WorldChange per participant for war attrition', async () => {
+    const attacker = makeFaction('att-a', { military: 40, resources: 50 })
+    const defender = makeFaction('def-a', { military: 40, resources: 50 })
+
+    const war = {
+      id: 'war-1',
+      campaignId: 'campaign-1',
+      name: 'Test War',
+      attackerFactionId: 'att-a',
+      defenderFactionId: 'def-a',
+      contestedLocationId: null,
+      momentum: 0,
+      startedTurn: 1,
+      attacker,
+      defender,
+      participants: [
+        makeParticipant('war-1', 'att-a', 'ATTACKER', attacker),
+        makeParticipant('war-1', 'def-a', 'DEFENDER', defender),
+      ],
+    }
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([war] as any)
+
+    const result = await tickWars(baseCtx({ turnNumber: simTurn(2) }))
+
+    const resourceChanges = result.changes.filter((c) => c.field === 'resources')
+    // One per living participant on each side.
+    expect(resourceChanges).toHaveLength(2)
+    expect(resourceChanges).toContainEqual(
+      expect.objectContaining({
+        entityType: 'FACTION',
+        entityId: 'att-a',
+        entityName: 'att-a',
+        campaignId: 'campaign-1',
+        field: 'resources',
+        previousValue: 50,
+        newValue: 47, // base attrition: -3 resources
+        reason: 'att-a burns resources sustaining the war effort',
+        significant: false,
+        importance: 'MINOR',
+      })
+    )
+    expect(resourceChanges).toContainEqual(
+      expect.objectContaining({
+        entityType: 'FACTION',
+        entityId: 'def-a',
+        entityName: 'def-a',
+        campaignId: 'campaign-1',
+        field: 'resources',
+        previousValue: 50,
+        newValue: 47,
+        reason: 'def-a burns resources sustaining the war effort',
+        significant: false,
+        importance: 'MINOR',
+      })
+    )
+  })
 })

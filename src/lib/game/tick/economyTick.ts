@@ -90,7 +90,7 @@ const DEBT_REPAYMENT_PER_TICK = 10
 // influence hit feeds straight back into declaration gating
 // (INFLUENCE_DECLARATION_FLOOR in warTick.ts): a faction that stiffs its
 // creditors can't rally anyone into its next war.
-const DEFAULT_DEBTOR_INFLUENCE_PENALTY = 8
+const DEFAULT_DEBTOR_INFLUENCE_PENALTY = 15
 
 export interface LoanCandidate {
   factionId: string
@@ -473,6 +473,38 @@ export async function tickEconomy(ctx: TickContext): Promise<TickHandlerResult> 
         // installment is routine bookkeeping on the way there.
         significant: repayment.settled,
         importance: 'NORMAL',
+      })
+      // The resources actually moved too — the repayment step wrote both
+      // balances via faction.update, but only the debt change above was
+      // reported, so the treasury-collapse classifier (which reads
+      // faction resources events) never saw a repayment drain a debtor to
+      // LOW. Two resources changes per repayment fix the read, in the same
+      // array as the debt change. significant: false keeps installment
+      // bookkeeping out of history/rumor spam; the disposition reader has
+      // no significance filter, so it still sees the transition.
+      changes.push({
+        entityType: 'FACTION',
+        entityId: repayment.debtorFactionId,
+        entityName: debtorName,
+        campaignId: ctx.campaignId,
+        field: 'resources',
+        previousValue: debtorBalance,
+        newValue: newDebtorResources,
+        reason: `${debtorName} repays ${repayment.repaid} resources to ${creditorName}`,
+        significant: false,
+        importance: 'MINOR',
+      })
+      changes.push({
+        entityType: 'FACTION',
+        entityId: repayment.creditorFactionId,
+        entityName: creditorName,
+        campaignId: ctx.campaignId,
+        field: 'resources',
+        previousValue: creditorBalance,
+        newValue: newCreditorResources,
+        reason: `${debtorName} repays ${repayment.repaid} resources to ${creditorName}`,
+        significant: false,
+        importance: 'MINOR',
       })
     }
   }

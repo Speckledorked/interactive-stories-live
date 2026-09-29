@@ -16,7 +16,7 @@ import { decideWarDeclaration, decideWarJoiner, decideWarProgress } from '../war
 import { decideWarLosingPressure, decideFactionCollapse, decideFactionGoalReassessment } from '../factionTick'
 import { decideDispositionDrift } from '../npcDispositionTick'
 import { decideBeliefDrift } from '../beliefTick'
-import { decideAmbitionTick } from '../ambitionTick'
+import { decideAmbitionTick, decideAmbitionOutcome } from '../ambitionTick'
 import { planDebtRepayment, tickEconomy } from '../economyTick'
 import { decideNpcTick } from '../npcTick'
 import { decideExtraction } from '../logisticsTick'
@@ -170,16 +170,16 @@ describe('sim-depth wiring batch 3', () => {
   describe('mobilization', () => {
     const disposition = { selfPreservation: 50, loyalty: 50, ambition: 50 }
 
-    it('sharpens NPC self-preservation by 4 on mobilization', () => {
+    it('sharpens NPC self-preservation by 8 on mobilization', () => {
       const next = decideDispositionDrift(disposition, [{ kind: 'FACTION_MOBILIZED' }])
-      expect(next.selfPreservation).toBe(54)
+      expect(next.selfPreservation).toBe(58)
       expect(next.loyalty).toBe(50)
     })
 
-    it('stirs belief zealotry by 2 on mobilization', () => {
+    it('stirs belief zealotry by 4 on mobilization', () => {
       const beliefs = { aggression: 50, isolationism: 50, mercantilism: 50, zealotry: 50 }
       const next = decideBeliefDrift(beliefs, [{ kind: 'MOBILIZED' }])
-      expect(next.zealotry).toBe(52)
+      expect(next.zealotry).toBe(54)
       expect(next.aggression).toBe(50)
     })
   })
@@ -240,7 +240,9 @@ describe('sim-depth wiring batch 3', () => {
     })
   })
 
-  // ---- #7 + #15: faction goal logic sees war; ambition clock holds ------
+  // ---- #7 + #15: faction goal logic sees war; the ambition-clock hold is
+  // GONE (sim bite-tuning) — a faction CAN drift mid-clock now; the
+  // replacement is the −15 resolution penalty, not a veto ----
   describe('faction goal reassessment', () => {
     const healthy = {
       resources: 70,
@@ -255,30 +257,41 @@ describe('sim-depth wiring batch 3', () => {
       expect(decideFactionGoalReassessment({ ...healthy, atWar: true })).toBe('DEFEND')
     })
 
-    it('holds the goal while a live ambition clock runs', () => {
+    it('no longer holds the goal while an ambition is in flight — drift is allowed', () => {
       // LOW resources would normally redirect an EXPAND faction to ENRICH
-      // (past the commitment window) — the live clock holds it instead.
+      // (past the commitment window). The removed hard hold kept it on
+      // EXPAND whenever a live ambition clock existed; now the faction
+      // reassesses like any other turn and the drift happens.
       const poor = { ...healthy, resources: 10 }
       expect(decideFactionGoalReassessment(poor)).toBe('ENRICH')
-      expect(decideFactionGoalReassessment({ ...poor, hasActiveAmbitionClock: true })).toBe('EXPAND')
     })
 
-    it('lets a genuine crisis override the ambition-clock hold', () => {
-      expect(
-        decideFactionGoalReassessment({ ...healthy, hasActiveAmbitionClock: true, stability: 10 })
-      ).toBe('DEFEND')
+    it('still redirects a genuinely collapsing faction to DEFEND — crisis never needed the clock', () => {
+      expect(decideFactionGoalReassessment({ ...healthy, stability: 10 })).toBe('DEFEND')
     })
 
-    it('lets war override the ambition-clock hold too', () => {
-      expect(
-        decideFactionGoalReassessment({ ...healthy, hasActiveAmbitionClock: true, atWar: true })
-      ).toBe('DEFEND')
+    it('still redirects an at-war faction to DEFEND', () => {
+      expect(decideFactionGoalReassessment({ ...healthy, atWar: true })).toBe('DEFEND')
+    })
+  })
+
+  // ---- the goal-drift resolution penalty (replaces the hold) ------------
+  describe('goal-drift success penalty', () => {
+    // Fixture roll 79 (stableHash('f1:drift-clock-14') % 100): ENRICH at
+    // resources 80 is chance 80 un-drifted (success) and 65 drifted
+    // (failure) — the same deterministic roll, only the flag moves.
+    const driftedInput = { factionId: 'f1', clockId: 'drift-clock-14', factionName: 'Ashcrown', goal: 'ENRICH' as const, resources: 80, military: 80 }
+
+    it('applies the −15 penalty only when the faction drifted mid-clock', () => {
+      expect(decideAmbitionOutcome(driftedInput).success).toBe(true)
+      expect(decideAmbitionOutcome({ ...driftedInput, goalDriftedMidClock: true }).success).toBe(false)
+      expect(decideAmbitionOutcome({ ...driftedInput, goalDriftedMidClock: false }).success).toBe(true)
     })
   })
 
   // ---- #8: default penalizes debtor -------------------------------------
   describe('default penalizes the debtor', () => {
-    it('costs an active defaulting debtor 8 influence, once per debtor per pass', async () => {
+    it('costs an active defaulting debtor 15 influence, once per debtor per pass', async () => {
       vi.mocked(prisma.factionDebt.findMany).mockResolvedValueOnce([
         { id: 'debt1', creditorFactionId: 'creditor1', debtorFactionId: 'debtor1', amount: 20, turnCreated: 5 },
         { id: 'debt2', creditorFactionId: 'creditor2', debtorFactionId: 'debtor1', amount: 30, turnCreated: 5 },
@@ -304,7 +317,7 @@ describe('sim-depth wiring batch 3', () => {
       expect(influenceChanges[0]).toMatchObject({
         entityId: 'debtor1',
         previousValue: 40,
-        newValue: 32,
+        newValue: 25,
       })
       expect(influenceChanges[0].reason).toMatch(/defaults on 2 debts/)
     })
@@ -368,11 +381,18 @@ describe('sim-depth wiring batch 3', () => {
       expect(decideExtraction([loc({ conditionScore: 0 })], [])).toEqual([])
     })
 
-    it('yields half (floored) from a RUINED location', () => {
+    it('yields a quarter (floored) from a RUINED location', () => {
       const decisions = decideExtraction([loc({ conditionScore: 10 })], [])
       expect(decisions).toHaveLength(1)
-      // 2 slots * gain-per-slot, halved and floored — strictly less than
+      // 2 slots * gain-per-slot, quartered and floored — strictly less than
       // the full yield below.
+      const full = decideExtraction([loc({ conditionScore: 80 })], [])[0].resourceGain
+      expect(decisions[0].resourceGain).toBe(Math.floor(full / 4))
+    })
+
+    it('yields half (floored) from a DAMAGED location', () => {
+      const decisions = decideExtraction([loc({ conditionScore: 40 })], [])
+      expect(decisions).toHaveLength(1)
       const full = decideExtraction([loc({ conditionScore: 80 })], [])[0].resourceGain
       expect(decisions[0].resourceGain).toBe(Math.floor(full / 2))
     })
@@ -478,8 +498,8 @@ describe('sim-depth wiring batch 3', () => {
       expect(decideDispositionDrift(disposition, [{ kind: 'AMBITION_FAILED' }]).loyalty).toBe(46)
     })
 
-    it('lowers loyalty 4 on treasury collapse', () => {
-      expect(decideDispositionDrift(disposition, [{ kind: 'TREASURY_COLLAPSED' }]).loyalty).toBe(46)
+    it('lowers loyalty 8 on treasury collapse', () => {
+      expect(decideDispositionDrift(disposition, [{ kind: 'TREASURY_COLLAPSED' }]).loyalty).toBe(42)
     })
 
     it('clamps loyalty at the rails', () => {
@@ -552,11 +572,12 @@ describe('sim-depth wiring batch 3', () => {
   describe('refugees avoid rival territory', () => {
     const npc = { id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true, factionId: 'f-home' }
 
-    it('a named NPC avoids destinations owned by their own faction rival', () => {
+    it('a named NPC deprioritizes destinations owned by their own faction rival', () => {
+      // Graded -10, not exclusion: rival-town 85 -> 75 loses to safe-town 80.
       const { npcMoves } = decideMigration(
         [{ id: 'ruins', name: 'Ruins', conditionScore: 10, population: null, ownerFactionId: 'f-home' }],
         [
-          { id: 'rival-town', name: 'Rival Town', conditionScore: 90, population: null, ownerFactionId: 'f-rival' },
+          { id: 'rival-town', name: 'Rival Town', conditionScore: 85, population: null, ownerFactionId: 'f-rival' },
           { id: 'safe-town', name: 'Safe Town', conditionScore: 80, population: null, ownerFactionId: 'f-friend' },
         ],
         [npc],
@@ -567,11 +588,27 @@ describe('sim-depth wiring batch 3', () => {
       expect(npcMoves[0].toLocationId).toBe('safe-town')
     })
 
+    it('a named NPC still picks the rival destination when it is clearly better', () => {
+      // rival-town 95 -> 85 still beats safe-town 80: preference, not veto.
+      const { npcMoves } = decideMigration(
+        [{ id: 'ruins', name: 'Ruins', conditionScore: 10, population: null, ownerFactionId: 'f-home' }],
+        [
+          { id: 'rival-town', name: 'Rival Town', conditionScore: 95, population: null, ownerFactionId: 'f-rival' },
+          { id: 'safe-town', name: 'Safe Town', conditionScore: 80, population: null, ownerFactionId: 'f-friend' },
+        ],
+        [npc],
+        [],
+        new Map(),
+        new Map([['f-home', 'f-rival']])
+      )
+      expect(npcMoves[0].toLocationId).toBe('rival-town')
+    })
+
     it('background population uses the source owner rival, not an NPC faction', () => {
       const { populationFlights } = decideMigration(
         [{ id: 'ruins', name: 'Ruins', conditionScore: 10, population: 500, ownerFactionId: 'f-home' }],
         [
-          { id: 'rival-town', name: 'Rival Town', conditionScore: 90, population: null, ownerFactionId: 'f-rival' },
+          { id: 'rival-town', name: 'Rival Town', conditionScore: 85, population: null, ownerFactionId: 'f-rival' },
           { id: 'safe-town', name: 'Safe Town', conditionScore: 80, population: null, ownerFactionId: 'f-friend' },
         ],
         [],
@@ -620,17 +657,17 @@ describe('sim-depth wiring batch 3', () => {
       expect(decision.shouldDeclare).toBe(true)
     })
 
-    it('a crumbling defender lowers the attacker bar by 10, but the defender must still clear the floor', () => {
-      // Attacker at 60 clears the reduced bar (67 - 10 = 57)...
+    it('a crumbling defender lowers the attacker bar by 20, but the defender must still clear the floor', () => {
+      // Attacker at 50 clears the reduced bar (67 - 20 = 47)...
       const weak = decideWarDeclaration(
-        declarationAttacker({ military: 60 }),
+        declarationAttacker({ military: 50 }),
         declarationDefender({ stability: 20 }),
         contestedPrize
       )
       expect(weak.shouldDeclare).toBe(true)
-      // ...but a 50-military attacker still cannot declare.
+      // ...but a 45-military attacker still cannot declare.
       const tooWeak = decideWarDeclaration(
-        declarationAttacker({ military: 50 }),
+        declarationAttacker({ military: 45 }),
         declarationDefender({ stability: 20 }),
         contestedPrize
       )
@@ -647,9 +684,9 @@ describe('sim-depth wiring batch 3', () => {
 
   // ---- #19: self-preservation affects declarations ----------------------
   describe('self-preservation affects declarations', () => {
-    it('a leader at 80 self-preservation vetoes the declaration', () => {
+    it('a leader at 70 self-preservation vetoes the declaration', () => {
       const decision = decideWarDeclaration(
-        declarationAttacker({ leaderSelfPreservation: 80 }),
+        declarationAttacker({ leaderSelfPreservation: 70 }),
         declarationDefender(),
         contestedPrize
       )
@@ -657,9 +694,9 @@ describe('sim-depth wiring batch 3', () => {
       expect(decision.selfPreservationVeto).toBe(true)
     })
 
-    it('a leader at 79 does not veto', () => {
+    it('a leader at 69 does not veto', () => {
       const decision = decideWarDeclaration(
-        declarationAttacker({ leaderSelfPreservation: 79 }),
+        declarationAttacker({ leaderSelfPreservation: 69 }),
         declarationDefender(),
         contestedPrize
       )
@@ -675,11 +712,13 @@ describe('sim-depth wiring batch 3', () => {
 
   // ---- #20: winter raises attrition -------------------------------------
   describe('winter attrition', () => {
-    it('adds one military attrition to both sides in winter', () => {
+    it('adds two military attrition to both sides in winter', () => {
       const summer = decideWarProgress({ id: 'war1' }, { military: 80 }, { military: 80 }, 5, undefined, undefined, undefined, 'summer')
       const winter = decideWarProgress({ id: 'war1' }, { military: 80 }, { military: 80 }, 5, undefined, undefined, undefined, 'winter')
-      expect(winter.attackerMilitaryDelta).toBe(summer.attackerMilitaryDelta - 1)
-      expect(winter.defenderMilitaryDelta).toBe(summer.defenderMilitaryDelta - 1)
+      expect(winter.attackerMilitaryDelta).toBe(summer.attackerMilitaryDelta - 2)
+      expect(winter.defenderMilitaryDelta).toBe(summer.defenderMilitaryDelta - 2)
+      expect(winter.attackerMilitaryDelta).toBe(-4)
+      expect(winter.defenderMilitaryDelta).toBe(-4)
     })
 
     it('preserves prior behavior with no season', () => {

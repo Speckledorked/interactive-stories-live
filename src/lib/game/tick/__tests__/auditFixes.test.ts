@@ -261,6 +261,166 @@ describe('tickFactions goal-history lookback is bounded (audit fix #202)', () =>
   })
 })
 
+describe('tickFactions threat decay (sim bite)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // Routes the two worldEvent reads tickFactions issues: per-faction
+  // goal history ('faction.goal') and the batched decay-window success
+  // scan ('faction.ambitionResolved').
+  function mockWorldEvents(ambitionSuccessRows: any[]) {
+    vi.mocked(prisma.worldEvent.findMany).mockImplementation(((args: any) => {
+      if (args?.where?.type === 'faction.ambitionResolved') return ambitionSuccessRows
+      return []
+    }) as any)
+  }
+
+  function mockRoster(factions: any[]) {
+    vi.mocked(prisma.faction.findMany)
+      .mockResolvedValueOnce(factions as any) // capped active list
+      .mockResolvedValueOnce(factions.map((f) => ({ id: f.id })) as any) // full roster
+  }
+
+  function threatUpdates() {
+    return vi.mocked(prisma.faction.update).mock.calls.filter(
+      (c) => (c[0] as any)?.data && 'threatLevel' in (c[0] as any).data
+    )
+  }
+
+  it('decays a quiet faction one threat level on a decay turn (every 20th)', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    mockRoster([a])
+    mockWorldEvents([])
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    expect(threatUpdates()).toEqual([
+      [{ where: { id: 'a' }, data: { threatLevel: 2 } }],
+    ])
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      entityType: 'FACTION',
+      entityId: 'a',
+      field: 'threat',
+      previousValue: 3,
+      newValue: 2,
+      significant: false,
+      importance: 'MINOR',
+    }))
+  })
+
+  it('skips the decay step entirely on a non-decay turn — no success query, no write', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    mockRoster([a])
+    mockWorldEvents([])
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(21) }))
+
+    const decayCalls = vi.mocked(prisma.worldEvent.findMany).mock.calls.filter(
+      (c) => (c[0] as any)?.where?.type === 'faction.ambitionResolved'
+    )
+    expect(decayCalls).toHaveLength(0)
+    expect(threatUpdates()).toHaveLength(0)
+    expect(result.changes.some((c) => c.field === 'threat')).toBe(false)
+  })
+
+  it('issues exactly one batched success query for the whole roster, not one per faction', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    const b = makeFaction('b', { threatLevel: 4 })
+    mockRoster([a, b])
+    mockWorldEvents([])
+
+    await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    const decayCalls = vi.mocked(prisma.worldEvent.findMany).mock.calls.filter(
+      (c) => (c[0] as any)?.where?.type === 'faction.ambitionResolved'
+    )
+    expect(decayCalls).toHaveLength(1)
+    expect((decayCalls[0][0] as any).where.targetId).toEqual({ in: ['a', 'b'] })
+    expect((decayCalls[0][0] as any).where.newValue).toBe('succeeded')
+    expect((decayCalls[0][0] as any).where.turnNumber).toEqual({ gte: 0 }) // turn 20 - 20: exact window boundary
+    expect(threatUpdates()).toHaveLength(2)
+  })
+
+  it('does not decay a faction with a successful ambition inside the window', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    const b = makeFaction('b', { threatLevel: 3 })
+    mockRoster([a, b])
+    mockWorldEvents([{ targetId: 'a', turnNumber: 12 }]) // inside turn 20's [0, 20] window
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    expect(threatUpdates()).toEqual([
+      [{ where: { id: 'b' }, data: { threatLevel: 2 } }],
+    ])
+    expect(result.changes.some((c) => c.entityId === 'a' && c.field === 'threat')).toBe(false)
+    expect(result.changes.some((c) => c.entityId === 'b' && c.field === 'threat')).toBe(true)
+  })
+
+  it('treats a success exactly on the window boundary as recent (gte, not gt)', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    mockRoster([a])
+    // Turn 40's window starts at 20 — a success AT turn 20 must block.
+    mockWorldEvents([{ targetId: 'a', turnNumber: 20 }])
+
+    await tickFactions(baseCtx({ turnNumber: simTurn(40) }))
+
+    expect(threatUpdates()).toHaveLength(0)
+  })
+
+  it('does not decay a faction already at the minimum threat of 1', async () => {
+    const a = makeFaction('a', { threatLevel: 1 })
+    mockRoster([a])
+    mockWorldEvents([])
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    expect(threatUpdates()).toHaveLength(0)
+    expect(result.changes.some((c) => c.field === 'threat')).toBe(false)
+  })
+
+  it('does not decay a faction that collapsed this tick', async () => {
+    const doomed = makeFaction('doomed', { stability: 5, threatLevel: 3 })
+    mockRoster([doomed])
+    mockWorldEvents([])
+    // The collapse's successor-founding path reads the created row's id.
+    vi.mocked(prisma.faction.create).mockResolvedValue({ id: 'remnant-1' } as any)
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    expect(result.changes.some((c) => c.field === 'collapsed')).toBe(true)
+    expect(threatUpdates()).toHaveLength(0)
+    expect(result.changes.some((c) => c.entityId === 'doomed' && c.field === 'threat')).toBe(false)
+  })
+
+  it('reports the decay change but writes nothing in dryRun', async () => {
+    const a = makeFaction('a', { threatLevel: 3 })
+    mockRoster([a])
+    mockWorldEvents([])
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20), dryRun: true }))
+
+    expect(prisma.faction.update).not.toHaveBeenCalled()
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      entityId: 'a',
+      field: 'threat',
+      previousValue: 3,
+      newValue: 2,
+    }))
+  })
+
+  it('does not write NaN or a decay change for a fixture with no threatLevel on a decay turn', async () => {
+    const a = makeFaction('a') // no threatLevel — the validate-on-read guard skips it
+    mockRoster([a])
+    mockWorldEvents([])
+
+    const result = await tickFactions(baseCtx({ turnNumber: simTurn(20) }))
+
+    expect(threatUpdates()).toHaveLength(0)
+    expect(result.changes.some((c) => c.field === 'threat')).toBe(false)
+  })
+})
+
 describe('tickFactionAmbitions war exclusion (audit fix)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

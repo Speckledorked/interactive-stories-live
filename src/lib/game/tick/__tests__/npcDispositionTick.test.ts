@@ -81,12 +81,16 @@ describe('decideDispositionDrift (NPC motivation model)', () => {
     })
   })
 
-  it('the faction losing lowers loyalty and raises selfPreservation, each by exactly one event\'s worth', () => {
+  it('the faction losing lowers loyalty and ambition and raises selfPreservation, each by exactly one event\'s worth', () => {
     const next = decideDispositionDrift(NEUTRAL_DISPOSITION, [{ kind: 'FACTION_LOST' }])
     expect(next).toEqual({
       ...NEUTRAL_DISPOSITION,
       loyalty: NEUTRAL_DISPOSITION.loyalty - 4,
       selfPreservation: NEUTRAL_DISPOSITION.selfPreservation + 4,
+      // The loss also teaches that the leadership's gambles don't pay —
+      // ambition cools too, which is what keeps the ambition-clock and
+      // coalition-joiner dovish-leader gates reachable.
+      ambition: NEUTRAL_DISPOSITION.ambition - 4,
     })
   })
 
@@ -148,6 +152,72 @@ describe('tickNpcDisposition (DB handler)', () => {
     expect(prisma.nPC.update).toHaveBeenCalledWith({
       where: { id: 'npc1' },
       data: { dispositionDriftThroughTurn: 4 },
+    })
+  })
+
+  // #103's wake-resolution change: a wake fading back out restores
+  // stability — the NPC reads it as the faction steadying, not as a fresh
+  // loss. wakeTick.ts tags it wakeSourceType: 'RESOLUTION'.
+  it('treats a wake-resolution stability recovery (wakeSourceType RESOLUTION) as steadied, raising loyalty', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', previousValue: '40', newValue: '48', origin: 'wake', wakeSourceType: 'RESOLUTION' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    // Loyalty went UP, not down: the recovery must never also count as
+    // abandonment (the abandonment branch keys on wakeSourceType NPC /
+    // FACTION, and the steadied branch is checked first).
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: expect.objectContaining({ disposition: expect.objectContaining({ loyalty: NEUTRAL_DISPOSITION.loyalty + 4 }) }),
+    })
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('does NOT treat a RESOLUTION row as steadied when stability did not actually recover', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      // Same shape, but the "recovery" restored nothing — a flat or
+      // negative move is not a recovery.
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.stability', previousValue: '48', newValue: '48', origin: 'wake', wakeSourceType: 'RESOLUTION' }] as any)
+
+    const result = await tickNpcDisposition(baseCtx())
+
+    expect(result.changes).toEqual([])
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { dispositionDriftThroughTurn: 4 },
+    })
+  })
+
+  it('treats a treasury collapse (resources banding INTO low) as an 8-point loyalty hit', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.resources', previousValue: '40', newValue: '20', origin: 'tick' }] as any)
+
+    await tickNpcDisposition(baseCtx())
+
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: expect.objectContaining({ disposition: expect.objectContaining({ loyalty: NEUTRAL_DISPOSITION.loyalty - 8 }) }),
+    })
+  })
+
+  it('a mobilization (warDeclared) sharpens self-preservation by 8 at the handler level', async () => {
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([{ id: 'npc1', name: 'Bram', factionId: 'f1', disposition: null, dispositionDriftThroughTurn: null }] as any)
+    vi.mocked(prisma.worldEvent.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ targetId: 'f1', turnNumber: 11, type: 'faction.warDeclared', newValue: null, origin: 'tick' }] as any)
+
+    await tickNpcDisposition(baseCtx())
+
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: expect.objectContaining({ disposition: expect.objectContaining({ selfPreservation: NEUTRAL_DISPOSITION.selfPreservation + 8 }) }),
     })
   })
 

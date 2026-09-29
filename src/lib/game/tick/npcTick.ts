@@ -121,17 +121,27 @@ export interface NpcTickDecision {
  * `contestedIds` (also optional) marks locations with an active war on
  * their doorstep — NPCs avoid picking contested work destinations, and
  * make slower goal progress while stuck in one. Absent, contested ground
- * is invisible to the routine, exactly as before. */
+ * is invisible to the routine, exactly as before.
+ *
+ * `warZoneIds` (also optional) extends the SLOWDOWN only — locations
+ * owned by a faction fighting an ESCALATING war. Armies marching through
+ * the owner's territory disrupt the work even where no prize is being
+ * contested. Deliberately NOT part of work-destination avoidance: an
+ * NPC still commutes into war-zone ground, they just work at half
+ * speed while there. */
 export interface NpcLocationGraph {
   idByName: Map<string, string>
   edges: AdjacencyEdge[]
   contestedIds?: ReadonlySet<string>
+  warZoneIds?: ReadonlySet<string>
 }
 
-// Working a war zone (or serving a faction that no longer exists as an
-// independent actor) halves goal progress — you can't get much done with
-// armies marching through, or when the institution you served has
-// collapsed out from under you.
+// Working a war zone — the NPC's current location is either a contested
+// war prize (contestedIds) or owned by a faction fighting an ESCALATING
+// war (warZoneIds) — halves goal progress, as does serving a faction
+// that no longer exists as an independent actor. You can't get much
+// done with armies marching through, or when the institution you served
+// has collapsed out from under you.
 const CONTESTED_PROGRESS_MULTIPLIER = 0.5
 
 /** Pure decision function — no DB access, safe to unit test directly. */
@@ -169,10 +179,19 @@ export function decideNpcTick(
     : `${phase} (${timeOfDay}): ${goalText}${factionNote}`
 
   const contestedIds = locationGraph?.contestedIds
+  const warZoneIds = locationGraph?.warZoneIds
   const isContestedName = (name: string): boolean => {
     if (!contestedIds) return false
     const id = locationGraph!.idByName.get(name)
     return id !== undefined && contestedIds.has(id)
+  }
+  // War-zone membership (location owned by a faction fighting an
+  // ESCALATING war) counts for the progress slowdown but never for
+  // work-destination avoidance — see NpcLocationGraph.warZoneIds.
+  const isWarZoneName = (name: string): boolean => {
+    if (!warZoneIds) return false
+    const id = locationGraph!.idByName.get(name)
+    return id !== undefined && warZoneIds.has(id)
   }
 
   let nextLocation: string | null = null
@@ -229,12 +248,18 @@ export function decideNpcTick(
   // nothing.
   const hasGoal = !!npc.goals?.trim()
   const currentLocationContested = !!npc.currentLocation && isContestedName(npc.currentLocation)
+  // A location owned by a faction fighting an ESCALATING war slows the
+  // NPC down even when nothing is contested on the location itself —
+  // armies marching through the owner's territory still disrupt the
+  // work. Work-destination avoidance deliberately stays contested-only
+  // (see isContestedName / NpcLocationGraph.warZoneIds).
+  const currentLocationWarZone = !!npc.currentLocation && isWarZoneName(npc.currentLocation)
   // Truly unaffiliated NPCs (faction null) are never touched by the
   // faction clause — only an NPC whose faction exists but is inactive
   // works at half speed. isActive is optional and defaults to active, so
   // callers that pass a faction object without it keep prior behavior.
   const factionInactive = !!faction && faction.isActive === false
-  const progressMultiplier = currentLocationContested || factionInactive ? CONTESTED_PROGRESS_MULTIPLIER : 1
+  const progressMultiplier = currentLocationContested || currentLocationWarZone || factionInactive ? CONTESTED_PROGRESS_MULTIPLIER : 1
   const rawProgress = hasGoal ? npc.goalProgress + PROGRESS_PER_TICK * PHASE_PROGRESS_WEIGHT[phase] * progressMultiplier : npc.goalProgress
   const goalCompleted = rawProgress >= 100
   const newGoalProgress = goalCompleted ? 0 : rawProgress
@@ -251,7 +276,7 @@ export function decideNpcTick(
 }
 
 export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
-  const [npcs, locations, adjacencyRows] = await Promise.all([
+  const [npcs, locations, adjacencyRows, warParticipants] = await Promise.all([
     ctx.db.nPC.findMany({
       where: { campaignId: ctx.campaignId, isAlive: true, importance: { gte: MAJOR_IMPORTANCE_THRESHOLD }, ...rosterNpcFilter(ctx) },
       // #283: importance desc is the intentional priority — most important
@@ -264,8 +289,10 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     ctx.db.location.findMany({
       where: { campaignId: ctx.campaignId, isDiscovered: true },
       // isContested is selected so NPC routines can avoid marching into
-      // war zones for their work commute (see NpcLocationGraph).
-      select: { id: true, name: true, isContested: true },
+      // war zones for their work commute (see NpcLocationGraph), and
+      // ownerFactionId so locations owned by a faction fighting an
+      // ESCALATING war can slow goal progress even when uncontested.
+      select: { id: true, name: true, isContested: true, ownerFactionId: true },
     }),
     // #108: optional input to decideNpcTick's "work" pick — falls back to
     // the pre-#108 hash rotation when this is empty or doesn't cover a
@@ -273,6 +300,12 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
     ctx.db.locationAdjacency.findMany({
       where: { campaignId: ctx.campaignId },
       select: { locationAId: true, locationBId: true, distance: true },
+    }),
+    // Active-war participants: a location owned by any of these factions
+    // is war-zone ground for goal-progress purposes.
+    ctx.db.warParticipant.findMany({
+      where: { war: { campaignId: ctx.campaignId, status: 'ESCALATING' } },
+      select: { factionId: true },
     }),
   ])
 
@@ -284,7 +317,11 @@ export async function tickNpcs(ctx: TickContext): Promise<TickHandlerResult> {
   // #425 — Location stored as free text alongside the FK).
   const locationIdByName = new Map(locations.map((l) => [l.name, l.id]))
   const contestedIds = new Set(locations.filter((l) => l.isContested).map((l) => l.id))
-  const locationGraph: NpcLocationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[], contestedIds }
+  const participantFactionIds = new Set(warParticipants.map((p) => p.factionId))
+  const warZoneIds = new Set(
+    locations.filter((l) => l.ownerFactionId && participantFactionIds.has(l.ownerFactionId)).map((l) => l.id)
+  )
+  const locationGraph: NpcLocationGraph = { idByName: locationIdByName, edges: adjacencyRows as AdjacencyEdge[], contestedIds, warZoneIds }
   const changes: WorldChange[] = []
 
   for (const npc of npcs) {

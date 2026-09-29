@@ -24,8 +24,8 @@ const TRANSITIONS: Record<WeatherCondition, WeatherCondition[]> = {
 const SEVERE_CONDITIONS: WeatherCondition[] = ['STORM', 'SNOW']
 
 // Location.weatherSeverity runs 1-5 (see the write at the bottom of this
-// file); severe weather is a battlefield condition at 4+.
-const SEVERE_WEATHER_SEVERITY = 4
+// file); severe weather is a battlefield condition at 3+.
+const SEVERE_WEATHER_SEVERITY = 3
 
 /**
  * Pure — is this weather severe enough to matter mechanically? Shared by

@@ -225,3 +225,59 @@ describe('tickLocationCondition (DB handler)', () => {
     expect(result.changes).toHaveLength(1)
   })
 })
+
+describe('tickLocationCondition — seasonal modifier gated below baseline', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('winter does not degrade a prosperous location at/above baseline', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'loc-1', name: 'The Gardens', conditionScore: 80, isContested: false },
+    ] as any)
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([])
+
+    const result = await tickLocationCondition(baseCtx({ season: 'winter' }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.location.update).not.toHaveBeenCalled()
+  })
+
+  it('winter still bites a struggling location below baseline (recovery and winter cancel)', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'loc-1', name: 'The Slums', conditionScore: 40, isContested: false },
+    ] as any)
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([])
+
+    const result = await tickLocationCondition(baseCtx({ season: 'winter' }))
+
+    // 40 is below baseline: recovery (+1) and winter (−1) both apply and
+    // cancel exactly — the season applied BECAUSE the score is < 60.
+    expect(result.changes).toEqual([])
+    expect(prisma.location.update).not.toHaveBeenCalled()
+  })
+
+  it('spring aids recovery of a damaged location below baseline', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'loc-1', name: 'The Docks', conditionScore: 40, isContested: false },
+    ] as any)
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([])
+
+    const result = await tickLocationCondition(baseCtx({ season: 'spring' }))
+
+    expect(prisma.location.update).toHaveBeenCalledWith({ where: { id: 'loc-1' }, data: { conditionScore: 42 } })
+    expect(result.changes).toHaveLength(1)
+  })
+
+  it('the baseline edge is exclusive: a location at exactly 60 gets no seasonal nudge', async () => {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'loc-1', name: 'The Square', conditionScore: 60, isContested: false },
+    ] as any)
+    vi.mocked(prisma.war.findMany).mockResolvedValueOnce([])
+
+    const result = await tickLocationCondition(baseCtx({ season: 'winter' }))
+
+    expect(result.changes).toEqual([])
+    expect(prisma.location.update).not.toHaveBeenCalled()
+  })
+})

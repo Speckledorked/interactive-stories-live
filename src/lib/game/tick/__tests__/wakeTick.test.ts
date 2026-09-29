@@ -127,11 +127,26 @@ describe('tickWake (DB handler)', () => {
     vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([])
     vi.mocked(prisma.faction.findMany).mockResolvedValueOnce([])
 
-    await tickWake(baseCtx())
+    const result = await tickWake(baseCtx())
 
     const updateCall = vi.mocked(prisma.activeWake.update).mock.calls[0][0] as any
     expect(updateCall.data.currentTicks).toBe(5)
     expect(updateCall.data.resolvedAt).toBeInstanceOf(Date)
+
+    // The recovery-side change is tagged wakeSourceType: 'RESOLUTION' so
+    // npcDispositionTick.ts classifies it as FACTION_STEADIED (loyalty
+    // +4) rather than reading a positive wake stability move as
+    // abandonment — the creation-side rows above stay 'NPC'/'FACTION'.
+    const recovery = result.changes.find((c) => c.wakeSourceType === 'RESOLUTION')
+    expect(recovery).toMatchObject({
+      entityType: 'FACTION',
+      entityId: 'f1',
+      field: 'stability',
+      origin: 'wake',
+      significant: false,
+      importance: 'NORMAL',
+    })
+    expect(Number(recovery!.newValue)).toBeGreaterThan(Number(recovery!.previousValue))
   })
 
   it('creates a wake and hits stability for an ordinary member\'s death', async () => {

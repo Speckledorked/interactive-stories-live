@@ -33,7 +33,7 @@ describe('decideLoanExtension (#111)', () => {
 
   it('extends a loan from a capable ally, amount capped at the same ceiling a quest payout respects', () => {
     const decision = decideLoanExtension({ factionId: 'f1', resources: 10 }, [{ factionId: 'ally1', resources: 80 }])
-    expect(decision).toEqual({ lenderFactionId: 'ally1', amount: 15 })
+    expect(decision).toEqual({ lenderFactionId: 'ally1', amount: 30 })
   })
 
   it('picks the richest capable lender when several qualify', () => {
@@ -190,9 +190,18 @@ describe('tickEconomy (DB handler)', () => {
 
     expect(prisma.factionDebt.updateMany).not.toHaveBeenCalled()
     // No default — but the solvent debtor repays an installment, which is
-    // a real change (the obligation shrinks; resources move).
-    expect(result.changes).toHaveLength(1)
+    // three real changes: the obligation shrinks, and resources move both
+    // ways (the treasury classifier reads resources events, not debt ones).
+    expect(result.changes).toHaveLength(3)
     expect(result.changes[0]).toMatchObject({ field: 'debt', newValue: 10 })
+    const resourcesChanges = result.changes.filter((c) => c.field === 'resources')
+    expect(resourcesChanges).toHaveLength(2)
+    expect(resourcesChanges).toContainEqual(
+      expect.objectContaining({ entityId: 'debtor1', previousValue: 60, newValue: 50 })
+    )
+    expect(resourcesChanges).toContainEqual(
+      expect.objectContaining({ entityId: 'creditor1', previousValue: 50, newValue: 60 })
+    )
   })
 
   it('excludes debts created THIS same turn from default-eligibility', async () => {
@@ -236,11 +245,11 @@ describe('tickEconomy (DB handler)', () => {
     const result = await tickEconomy(baseCtx())
 
     expect(prisma.factionDebt.createMany).toHaveBeenCalledWith({
-      data: [expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1', amount: 15, turnCreated: 10 })],
+      data: [expect.objectContaining({ creditorFactionId: 'ally1', debtorFactionId: 'broke1', amount: 30, turnCreated: 10 })],
       skipDuplicates: true,
     })
-    expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'ally1' }, data: { resources: 75 } })
-    expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'broke1' }, data: { resources: 25 } })
+    expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'ally1' }, data: { resources: 60 } })
+    expect(prisma.faction.update).toHaveBeenCalledWith({ where: { id: 'broke1' }, data: { resources: 40 } })
     expect(result.changes).toHaveLength(1)
     expect(result.changes[0]).toMatchObject({ entityId: 'broke1', field: 'resources' })
   })
@@ -507,8 +516,9 @@ describe('tickEconomy (DB handler)', () => {
     // Netting found no cycle, so nothing was written off...
     expect(result.changes.filter((c) => c.reason.includes('written off'))).toEqual([])
     // ...but the healthy debtors still serviced their oldest debt in full.
-    expect(result.changes).toHaveLength(2)
-    expect(result.changes.every((c) => c.field === 'debt')).toBe(true)
+    expect(result.changes).toHaveLength(6)
+    expect(result.changes.filter((c) => c.field === 'debt')).toHaveLength(2)
+    expect(result.changes.filter((c) => c.field === 'resources')).toHaveLength(4)
   })
 
   it('writes no netting in dry-run mode but still reports it', async () => {

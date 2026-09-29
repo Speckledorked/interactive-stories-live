@@ -21,8 +21,10 @@ const BASELINE_CONDITION = 60
  * magnitude as PEACETIME_RECOVERY): winter's cold bites exposed places,
  * spring's thaw aids recovery, summer and autumn are neutral. Kept
  * separate from seasonTick's resource modifiers (a different knob on a
- * different entity) and applied in tickLocationCondition below. Undefined
- * season (ctx.season absent) falls back to 0 — no season, no nudge.
+ * different entity) and applied in tickLocationCondition below — gated
+ * there to locations already below the BASELINE_CONDITION baseline, so a
+ * season never degrades a healthy place. Undefined season (ctx.season
+ * absent) falls back to 0 — no season, no nudge.
  */
 export const SEASON_CONDITION_MODIFIER: Record<Season, number> = {
   spring: 1,
@@ -137,8 +139,15 @@ export async function tickLocationCondition(ctx: TickContext): Promise<TickHandl
   for (const location of locations) {
     const warPresent = locationIdsAtWar.has(location.id)
     // The season's nudge on drift (winter bites, spring heals) — 0 when
-    // the campaign has no season in hand, so nothing here depends on it.
-    const seasonModifier = ctx.season ? SEASON_CONDITION_MODIFIER[ctx.season] : 0
+    // the campaign has no season in hand, and 0 when the location is
+    // already at/above the BASELINE_CONDITION baseline: seasons only bite
+    // places that are already struggling, so winter never degrades a
+    // peaceful prosperous place for no reason. See explainConditionDrift's
+    // own recovery gate — the same 60-point bar.
+    const seasonModifier =
+      ctx.season && location.conditionScore < BASELINE_CONDITION
+        ? SEASON_CONDITION_MODIFIER[ctx.season]
+        : 0
     const decision = decideConditionDrift(location, warPresent, location.isContested, seasonModifier)
     if (decision.nextConditionScore === location.conditionScore) continue
 

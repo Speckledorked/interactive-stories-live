@@ -87,6 +87,14 @@ describe('decideBeliefDrift (#104)', () => {
     expect(next.mercantilism).toBe(NEUTRAL_BELIEF.mercantilism)
   })
 
+  it('a mobilization stirs zealotry by the named 4-point nudge — a full event\'s weight, not a half nudge', () => {
+    const next = decideBeliefDrift(NEUTRAL_BELIEF, [{ kind: 'MOBILIZED' }])
+    expect(next.zealotry).toBe(NEUTRAL_BELIEF.zealotry + 4)
+    expect(next.aggression).toBe(NEUTRAL_BELIEF.aggression)
+    expect(next.isolationism).toBe(NEUTRAL_BELIEF.isolationism)
+    expect(next.mercantilism).toBe(NEUTRAL_BELIEF.mercantilism)
+  })
+
   it('folds multiple events in the same batch, each independently clamped', () => {
     const next = decideBeliefDrift(NEUTRAL_BELIEF, [{ kind: 'WAR_WON' }, { kind: 'WAR_WON' }, { kind: 'AMBITION_SUCCEEDED' }])
     expect(next.aggression).toBeGreaterThan(NEUTRAL_BELIEF.aggression + 4) // more than a single event's worth

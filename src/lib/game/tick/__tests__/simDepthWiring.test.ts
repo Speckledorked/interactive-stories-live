@@ -23,7 +23,10 @@ describe('isSevereWeather (shared weather predicate)', () => {
   })
 
   it('treats lesser weather as set dressing, not mechanics', () => {
-    expect(isSevereWeather('STORM', 3)).toBe(false)
+    // SEVERE_WEATHER_SEVERITY is 3: STORM/SNOW at severity 3+ is severe,
+    // severity 2 is still set dressing.
+    expect(isSevereWeather('STORM', 3)).toBe(true)
+    expect(isSevereWeather('STORM', 2)).toBe(false)
     expect(isSevereWeather('SNOW', 1)).toBe(false)
     expect(isSevereWeather('RAIN', 5)).toBe(false)
     expect(isSevereWeather('CLEAR', 5)).toBe(false)
@@ -72,19 +75,19 @@ describe('influence -> war declaration', () => {
     expect(d.influenceHesitation).toBe(true)
   })
 
-  it('declares when the attacker has standing (influence in MEDIUM+)', () => {
+  it('declares when the attacker has standing (influence at 50)', () => {
     const d = decideWarDeclaration({ id: 'att', military: 80, influence: 50 }, defender, locations)
     expect(d.shouldDeclare).toBe(true)
     expect(d.influenceHesitation).toBeUndefined()
   })
 
-  it('boundary: influence exactly 34 (MEDIUM floor) still declares', () => {
-    const d = decideWarDeclaration({ id: 'att', military: 80, influence: 34 }, defender, locations)
+  it('boundary: influence exactly 45 (the floor) still declares', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80, influence: 45 }, defender, locations)
     expect(d.shouldDeclare).toBe(true)
   })
 
-  it('boundary: influence 33 (LOW) hesitates', () => {
-    const d = decideWarDeclaration({ id: 'att', military: 80, influence: 33 }, defender, locations)
+  it('boundary: influence 44 hesitates', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80, influence: 44 }, defender, locations)
     expect(d.shouldDeclare).toBe(false)
     expect(d.influenceHesitation).toBe(true)
   })
@@ -295,23 +298,23 @@ describe('season -> location condition drift', () => {
 describe('rumors -> disposition hearsay', () => {
   const base = { selfPreservation: 50, loyalty: 50, ambition: 50 }
 
-  it('hearing of a faction fall erodes loyalty by 2 (half the direct rate)', () => {
+  it('hearing of a faction fall erodes loyalty by 3 (below the direct rate)', () => {
     const next = decideDispositionDrift(base, [{ kind: 'HEARD_FACTION_FALL' }])
-    expect(next.loyalty).toBe(48)
+    expect(next.loyalty).toBe(47)
     expect(next.selfPreservation).toBe(50)
     expect(next.ambition).toBe(50)
   })
 
   it('two rumors stack, bounded by the 0-100 clamp', () => {
     const next = decideDispositionDrift(base, [{ kind: 'HEARD_FACTION_FALL' }, { kind: 'HEARD_FACTION_FALL' }])
-    expect(next.loyalty).toBe(46)
+    expect(next.loyalty).toBe(44)
     const floored = decideDispositionDrift({ ...base, loyalty: 1 }, [{ kind: 'HEARD_FACTION_FALL' }])
     expect(floored.loyalty).toBe(0)
   })
 
-  it('direct FACTION_LOST still hits twice as hard as hearsay (documented 1:2 ratio)', () => {
+  it('direct FACTION_LOST still hits harder than hearsay', () => {
     const next = decideDispositionDrift(base, [{ kind: 'FACTION_LOST' }])
-    expect(next.loyalty).toBe(46) // -4 direct
+    expect(next.loyalty).toBe(46) // -4 direct vs -3 hearsay
   })
 })
 

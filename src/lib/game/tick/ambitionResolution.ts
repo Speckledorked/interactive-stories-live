@@ -54,6 +54,12 @@ export async function resolveCompletedAmbitions(
       resources: faction.resources,
       military: faction.military,
       targetFactionName: target?.isActive ? target.name : undefined,
+      // The ambition's goal drifted off the faction's LIVE goal by
+      // resolution time (see the #227 note above) — the faction's heart
+      // isn't fully in it anymore, so the path to success is harder.
+      // Legacy clocks with no stored goal (null or undefined) read
+      // faction.goal here and can never drift by definition.
+      goalDriftedMidClock: clock.goal != null && clock.goal !== faction.goal,
     })
 
     const newResources = clamp(faction.resources + outcome.resourceDelta, 0, 100)

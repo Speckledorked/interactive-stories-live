@@ -53,12 +53,12 @@ export type RivalryPin = 'war' | 'belief'
 
 /**
  * Two factions count as ideological enemies when their belief vectors are
- * this far apart on ANY single axis (0-100 scale, neutral 50). 40 means one
- * side sits near an extreme the other rejects — e.g. aggression 90 vs 50 —
+ * this far apart on ANY single axis (0-100 scale, neutral 50). 28 means one
+ * side sits near an extreme the other rejects — e.g. aggression 78 vs 50 —
  * not a mild disagreement. Belief drift moves ~4 per event (beliefTick),
  * so crossing this takes sustained divergence, not one bad turn.
  */
-export const BELIEF_RIVALRY_DISTANCE = 40
+export const BELIEF_RIVALRY_DISTANCE = 28
 
 function maxBeliefDistance(a: BeliefVector, b: BeliefVector): number {
   return Math.max(
@@ -154,14 +154,16 @@ export async function tickFactionRelationships(ctx: TickContext): Promise<TickHa
     for (const a of attackers) for (const d of defenders) warPairKeys.add(pairKey(a, d))
   }
 
-  // A default strains the debtor-creditor tie one step toward hostility.
-  // Reads the debts tickEconomy defaulted LAST turn — it runs later in
-  // TICK_HANDLERS, so this turn's defaults don't exist yet. Same one-tick
-  // lag the module doc already describes for goals; keyed on turnResolved
-  // (not "currently DEFAULTED") so each default strains exactly once,
-  // not every tick the debt sits unresolved.
+  // A default strains the debtor-creditor tie one step toward hostility
+  // per tick for CASCADE_DECAY_TURNS (5) turns — matching economyTick's
+  // cascade decay window. Reads the debts tickEconomy defaulted in the
+  // LAST 5 turns — it runs later in TICK_HANDLERS, so this turn's
+  // defaults don't exist yet. Same one-tick lag the module doc already
+  // describes for goals; keyed on turnResolved (not "currently
+  // DEFAULTED") so the strain persists for exactly 5 ticks per default,
+  // not forever while the debt sits unresolved.
   const freshDefaults = await ctx.db.factionDebt.findMany({
-    where: { campaignId: ctx.campaignId, status: 'DEFAULTED', turnResolved: ctx.turnNumber - 1 },
+    where: { campaignId: ctx.campaignId, status: 'DEFAULTED', turnResolved: { gte: ctx.turnNumber - 5 } },
     select: { debtorFactionId: true, creditorFactionId: true },
   })
   const defaultedPairKeys = new Set(freshDefaults.map((d) => pairKey(d.debtorFactionId, d.creditorFactionId)))

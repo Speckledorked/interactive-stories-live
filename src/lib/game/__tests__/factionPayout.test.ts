@@ -66,7 +66,7 @@ describe('assessPayout', () => {
 
   // #306: `paid` (what the player receives) used to be capped only by the
   // faction's raw capacity, independent of `resourceCost`'s
-  // MAX_RESOURCE_COST_PER_PAYOUT cap — a healthy faction (resources > 15)
+  // MAX_RESOURCE_COST_PER_PAYOUT cap — a healthy faction (resources > 30)
   // could pay out thousands of gold for a reward well under
   // clampGoldDelta's 100,000 ceiling while its tracked depletion reflected
   // only a sliver of that. The two numbers must stay consistent: what the

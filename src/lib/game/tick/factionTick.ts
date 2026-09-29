@@ -187,16 +187,6 @@ export function explainFactionGoalReassessment(faction: {
    * Undefined/false keeps the pre-war behavior exactly.
    */
   atWar?: boolean
-  /**
-   * Whether the faction has a live spawned ambition clock (see
-   * ambitionTick.ts). A faction mid-project holds its goal until the
-   * project resolves — reassessing halfway would strand the ambition.
-   * Checked after the crisis branches (a faction genuinely coming apart
-   * still redirects) but before the commitment lock and every other
-   * redirect: the clock IS the commitment. Undefined/false keeps the
-   * pre-clock behavior exactly.
-   */
-  hasActiveAmbitionClock?: boolean
 }): FactionGoalExplanation {
   const stabilityBand = band(faction.stability)
   const resourcesBand = band(faction.resources)
@@ -232,16 +222,6 @@ export function explainFactionGoalReassessment(faction: {
   if (faction.atWar) {
     reasoning.push('At war — holding the line takes priority over any ambition.')
     return { goal: 'DEFEND', reasoning }
-  }
-
-  // A live ambition clock holds the goal until the project resolves — the
-  // faction already spent treasury committing to a grand undertaking, and
-  // reassessing mid-project would strand it. After the crisis branches
-  // (genuine collapse still redirects), before everything else: the
-  // clock is the commitment, not a suggestion.
-  if (faction.hasActiveAmbitionClock) {
-    reasoning.push('A faction ambition is still in progress — holding the current goal until it resolves rather than reassessing mid-project.')
-    return { goal: faction.goal, reasoning }
   }
 
   // Otherwise, hold the current course until it has been given a fair run.
@@ -306,7 +286,19 @@ export function decideFactionGoalReassessment(faction: Parameters<typeof explain
   return explainFactionGoalReassessment(faction).goal
 }
 
+// The BASE stability level at which a faction collapses — the threshold
+// for a faction at peace. Losing pressure in the field moves the
+// effective threshold UPWARD (see decideFactionCollapse): a faction
+// being routed collapses at a higher stability than one holding its own,
+// because the route is already the collapse.
 const COLLAPSE_STABILITY_THRESHOLD = 10
+// How far the collapse threshold moves with war losing pressure: pressure
+// 0 collapses only at stability ≤ 10, pressure 1 collapses at ≤ 10 + 20 =
+// 30. The threshold MOVES, deliberately, rather than losing pressure only
+// adding roughness to a fixed-threshold collapse — a faction at 25
+// stability that's being routed is already collapsing, while one at 25 at
+// peace is merely in crisis.
+const COLLAPSE_PRESSURE_THRESHOLD_RANGE = 20
 const ABSORPTION_TRANSFER_RATE = 0.3
 // #112: a smooth handoff and a chaotic collapse used to transfer faction
 // state identically. Even a total-chaos collapse (roughness 1) still
@@ -365,6 +357,14 @@ export function decideWarLosingPressure(momentum: number, side: string): number 
 // deeper crisis point it stops existing as an independent actor. If it has
 // a rival on record, that rival absorbs a slice of what's left; otherwise
 // it founds a successor (see decideFactionFounding below).
+//
+// The crisis point itself moves: collapse happens when stability falls at
+// or below COLLAPSE_STABILITY_THRESHOLD + 20 × losing pressure (pressure
+// clamped 0-1), so a faction being routed in the field collapses at up to
+// 30 stability while a faction at peace holds on until 10. A
+// pressure-triggered collapse above the base threshold reads as smooth on
+// the stability axis (computeCollapseRoughness clamps to 0 there) — the
+// war bump below still marks it as a messy one.
 /** Pure decision function — no DB access, safe to unit test directly. */
 export function decideFactionCollapse(faction: {
   stability: number
@@ -380,18 +380,28 @@ export function decideFactionCollapse(faction: {
   /**
    * 0-1 losing pressure from this faction's active wars (see
    * decideWarLosingPressure) — the worst across all its participations.
-   * A faction collapsing while its armies are being beaten in the field
-   * goes down messier. Undefined/0 is untouched, identical to the
-   * pre-war-momentum behavior.
+   * Two effects: a faction collapsing while its armies are being beaten
+   * in the field goes down messier (the war bump below), AND the collapse
+   * threshold itself moves up with pressure (see
+   * COLLAPSE_PRESSURE_THRESHOLD_RANGE) — being routed IS a collapse
+   * signal, not just a roughness one. Undefined/0 is untouched,
+   * identical to the pre-war-momentum behavior.
    */
   warLosingPressure?: number
 }): FactionCollapseDecision {
-  if (faction.stability > COLLAPSE_STABILITY_THRESHOLD) {
+  // The threshold moves with losing pressure — NOT the roughness. A
+  // faction at 25 stability being routed (pressure 1) is at or below the
+  // 30 effective threshold and collapses; the same faction at peace
+  // (pressure 0, threshold 10) is merely in crisis. Pressure clamped 0-1,
+  // the same clamp the war bump below applies.
+  const losingPressure = clamp(Number(faction.warLosingPressure ?? 0), 0, 1)
+  const collapseThreshold = COLLAPSE_STABILITY_THRESHOLD + COLLAPSE_PRESSURE_THRESHOLD_RANGE * losingPressure
+  if (faction.stability > collapseThreshold) {
     return { collapses: false, transferResources: 0, transferMilitary: 0, roughness: 0 }
   }
   const baseRoughness = computeCollapseRoughness(faction.stability)
   const wakeBump = Number(faction.activeWakeCount) >= WAKE_CRISIS_THRESHOLD ? WAKE_CRISIS_ROUGHNESS_BUMP : 0
-  const warBump = clamp(Number(faction.warLosingPressure ?? 0), 0, 1) * WAR_MOMENTUM_ROUGHNESS_BUMP
+  const warBump = losingPressure * WAR_MOMENTUM_ROUGHNESS_BUMP
   const roughness = clamp(baseRoughness + wakeBump + warBump, 0, 1)
   const effectiveRate = ABSORPTION_TRANSFER_RATE * (1 - roughness * (1 - ROUGHNESS_RATE_FLOOR))
   return {
@@ -446,8 +456,11 @@ export function decideFactionFounding(collapsedFaction: {
 // the absorber, matching the original unconditional behavior. Deliberately
 // above NEUTRAL_DISPOSITION's 50, so an ordinary, undrifted member still
 // defects by default — this only holds someone back once loyalty has
-// genuinely drifted high.
-const LOYALTY_STAY_THRESHOLD = 70
+// genuinely drifted high. Set below the old 70 so the ambition-decay
+// wiring (npcDispositionTick.ts's FACTION_LOST/AMBITION_FAILED ambition
+// hits) can actually move members across it — a bar nothing could move
+// would be a dead lever.
+const LOYALTY_STAY_THRESHOLD = 60
 
 export interface DefectionCandidate {
   id: string
@@ -486,10 +499,6 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
     // tieGraph.ts's TIE_INCLUDE for why both sides are always included.
     include: {
       ...TIE_INCLUDE,
-      // The live ambition clock (see ambitionTick.ts) holds the goal
-      // until the project resolves — read here so reassessment below can
-      // see it. Same active definition ambitionTick itself uses.
-      spawnedClocks: { select: { currentTicks: true, maxTicks: true } },
     },
   })
 
@@ -825,7 +834,6 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
           beliefVector: parseBeliefVector(faction.beliefVector),
           activeWakeCount,
           atWar: factionIdsAtWar.has(faction.id),
-          hasActiveAmbitionClock: faction.spawnedClocks.some((c) => c.currentTicks < c.maxTicks),
         })
 
     if (!ctx.dryRun) {
@@ -874,6 +882,69 @@ export async function tickFactions(ctx: TickContext): Promise<TickHandlerResult>
         reason: `${faction.name}'s circumstances shifted its priorities from ${faction.goal} to ${nextGoal}`,
         significant: true,
         importance: 'NORMAL',
+      })
+    }
+  }
+
+  // ── Threat decay: every THREAT_DECAY_TURNS turns, factions that won
+  // nothing in the window cool off one threat level. Threat otherwise
+  // ratchets up on every success and never comes down — a faction whose
+  // ambitions all failed twenty turns ago reads as menacing as one that
+  // just conquered a neighbor, which makes every downstream threat read
+  // (mobilization, diplomacy, fear) stale. Decay needs no new table: the
+  // tick's own faction.ambitionResolved events are the world's record of
+  // who won what, when.
+  //
+  // Skipped entirely except on decay turns, so the common case pays no
+  // query at all. One batched worldEvent read covers every faction in
+  // the roster; the floor is the existing minimum threat of 1.
+  const THREAT_DECAY_TURNS = 20
+  if (ctx.turnNumber % THREAT_DECAY_TURNS === 0) {
+    const decayWindowStart = ctx.turnNumber - THREAT_DECAY_TURNS
+    const recentSuccesses = await ctx.db.worldEvent.findMany({
+      where: {
+        campaignId: ctx.campaignId,
+        type: 'faction.ambitionResolved',
+        newValue: 'succeeded',
+        turnNumber: { gte: decayWindowStart },
+        targetId: { in: factions.map((f) => f.id) },
+      },
+      select: { targetId: true },
+    })
+    const factionsWithRecentSuccess = new Set(
+      recentSuccesses.map((e) => e.targetId).filter((id): id is string => id !== null)
+    )
+    for (const faction of factions) {
+      // A faction that collapsed this tick no longer exists as an
+      // independent actor — nothing left to cool off. The finite-number
+      // guard is the usual validate-on-read (see parseDisposition):
+      // threatLevel is a real column in production, but nothing should
+      // ever write NaN off a malformed read.
+      const currentThreat = Number(faction.threatLevel)
+      if (!activeFactionIds.has(faction.id)) continue
+      if (!Number.isFinite(currentThreat) || currentThreat <= 1) continue
+      if (factionsWithRecentSuccess.has(faction.id)) continue
+      const newThreatLevel = currentThreat - 1
+      if (!ctx.dryRun) {
+        await ctx.db.faction.update({
+          where: { id: faction.id },
+          data: { threatLevel: newThreatLevel },
+        })
+      }
+      changes.push({
+        entityType: 'FACTION',
+        entityId: faction.id,
+        entityName: faction.name,
+        campaignId: ctx.campaignId,
+        // Named 'threat', not the model field 'threatLevel', so the
+        // resulting WorldEvent reads faction.threat — distinct from a
+        // direct write to the underlying column.
+        field: 'threat',
+        previousValue: currentThreat,
+        newValue: newThreatLevel,
+        reason: `${faction.name}'s menace fades after ${THREAT_DECAY_TURNS} quiet turns with no grand triumphs`,
+        significant: false,
+        importance: 'MINOR',
       })
     }
   }

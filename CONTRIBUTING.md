@@ -41,13 +41,30 @@ keyword** immediately before the number — `Closes #491`, `Fixes #487`,
 issue's timeline, which looks almost identical in the UI and does nothing on
 merge.
 
-That distinction cost a round of manual cleanup once already. PR #511 closed
-26 issues and listed every one of them as `**#491** — ...` in a summary
-section. Every issue got its cross-link, the PR merged, and all 26 stayed
-open.
+Two different ways to get this wrong, and only one of them is checkable.
 
-**So: put the closing keywords in a list of their own, at the top of the PR
-body**, one per line, and keep the prose references separate:
+**A comma-run after one keyword** — `Closes #436, #437, #438` — closes the
+first number and silently drops the rest. That is #452, and it is caught:
+`scripts/check-pr-closing-keywords.ts`, run by the `pr-closing-keywords`
+workflow on open AND on body edit, fails the PR and prints the rewrite. The
+daily `issue-hygiene` workflow is the backstop, comparing the tracker against
+the docs.
+
+**No keyword at all** is the other one, and nothing catches it. PR #511 closed
+26 issues and listed every one as `**#491** — ...` in a summary section. The
+keyword checker passed honestly — there were no closing references to
+validate — the PR merged, and all 26 stayed open until someone noticed.
+
+It cannot become a gate, because "mentions an issue without closing it" is
+correct behaviour and the common case for any PR that explains its own
+boundaries. #511 named #489, #490 and #508 specifically to say they were out
+of scope, and referenced #500 because it did only part of it. A check that
+flagged those would be wrong three times in one PR, and a check that is
+routinely wrong is a check people learn to ignore.
+
+So the defence is the template, not a gate. `.github/pull_request_template.md`
+opens with a `Closes #` line before any prose. **Put the keywords there, one
+per line, and keep the prose references separate:**
 
 ```
 Closes #491
@@ -58,21 +75,15 @@ Closes #498
 The realtime channels were public (#491), ...
 ```
 
+One per line is also what keeps the comma-run bug from reappearing.
+
 The keywords have to be in the PR **body** — a closing keyword in a commit
-message only fires for commits pushed to the default branch, which is not
-how a squashed or merge-committed PR arrives.
+message only fires for commits pushed to the default branch, which is not how
+a squashed or merge-committed PR arrives.
 
-### Reference, deliberately, when you are not closing
-
-Not every mention should close something, and this is the reason the rule
-can't be a lint. A PR that says why it is *not* addressing an issue, or that
-partially addresses one, should reference it without a keyword — #511 named
-#489, #490 and #508 as out of scope, and an automated "you mentioned an issue
-but didn't close it" check would have been wrong about all three.
-
-When a PR closes part of an issue, say which part in a comment on the issue
-and leave it open. #511 did most of #500 and left the schema change to #512;
-only #512 carried `Closes #500`.
+When a PR closes only part of an issue, say which part in a comment on the
+issue and leave it open. #511 did most of #500 and left the schema change to
+#512; only #512 carried `Closes #500`.
 
 ## Everything else
 

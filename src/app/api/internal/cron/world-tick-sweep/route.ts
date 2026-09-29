@@ -13,8 +13,12 @@ import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
 import { reportError } from '@/lib/monitoring'
 
-// Hobby-plan-safe. sweepWorldTurnsForAllCampaigns caps how many campaigns
-// get a full (AI-calling) world turn per sweep for the same reason.
+// Hobby-plan-safe, and the number the sweep's own duration budget is
+// derived from — SWEEP_DURATION_BUDGET_MS in worldTurnSweep.ts. Raising
+// one without the other puts them back out of step, which is #503: the
+// sweep's cap was a count of 25 turns at ~20s each, authorised inside a
+// 60-second invocation, so the sweep did not stop when it ran long, it got
+// killed mid-turn.
 export const maxDuration = 60
 
 /**
@@ -91,7 +95,8 @@ export async function GET(request: NextRequest) {
   }
   console.log(
     `🌍 Cron world-turn sweep: ${result.ticked}/${result.campaignsChecked} campaigns ticked, ` +
-    `${result.failed} failed, ${result.skippedAtCap} deferred to tomorrow`
+    `${result.failed} failed, ${result.skippedAtCap} deferred at the cap, ` +
+    `${result.skippedOutOfTime} deferred out of time`
   )
 
   // #408: prune the oldest event history for whatever this sweep actually

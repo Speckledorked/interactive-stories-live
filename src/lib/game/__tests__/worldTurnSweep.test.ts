@@ -252,3 +252,52 @@ describe('sweepWorldTurnsForAllCampaigns', () => {
     expect(everTicked.size).toBeGreaterThan(25)
   })
 })
+
+// #503: MAX_TURNS_PER_SWEEP is a COUNT, and the limit it protects is TIME.
+// 25 turns at ~20s each inside a maxDuration-60 invocation is a number that
+// cannot be reached — so the sweep did not stop when it ran long, it got
+// killed mid-turn, which is the one way to leave a turn's work in a state
+// nothing chose. Partial sweeps themselves are fine: the order is
+// most-overdue-first and leftovers are still due next time.
+describe('sweepWorldTurnsForAllCampaigns duration budget (#503)', () => {
+  it('stops starting turns once the remaining budget cannot fit one', async () => {
+    const campaigns = Array.from({ length: 10 }, (_, i) => ({
+      id: `c${i}`,
+      worldMeta: { lastRealTimeTickAt: null },
+    }))
+    db.campaign.findMany.mockResolvedValue(campaigns)
+
+    // Each turn burns 20s of wall clock. With a 60s budget and a 12s
+    // reserve, only a couple can start.
+    let clock = 0
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    ;(runWorldTurnIfDue as any).mockImplementation(async () => {
+      clock += 20_000
+      return { ran: true }
+    })
+
+    const result = await sweepWorldTurnsForAllCampaigns()
+
+    expect(result.ticked).toBeLessThan(10)
+    expect(result.ticked).toBeGreaterThan(0)
+    // Counted apart from skippedAtCap: the cap is a policy, the clock is a
+    // capacity problem, and they call for different responses.
+    expect(result.skippedOutOfTime).toBe(10 - result.ticked)
+    expect(result.skippedAtCap).toBe(0)
+    nowSpy.mockRestore()
+  })
+
+  it('does not cut a sweep short when turns are fast', async () => {
+    const campaigns = Array.from({ length: 5 }, (_, i) => ({
+      id: `c${i}`,
+      worldMeta: { lastRealTimeTickAt: null },
+    }))
+    db.campaign.findMany.mockResolvedValue(campaigns)
+    ;(runWorldTurnIfDue as any).mockResolvedValue({ ran: true })
+
+    const result = await sweepWorldTurnsForAllCampaigns()
+
+    expect(result.ticked).toBe(5)
+    expect(result.skippedOutOfTime).toBe(0)
+  })
+})

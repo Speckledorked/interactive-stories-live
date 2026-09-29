@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Tabs } from '@/components/ui/tabs'
 import { campaignChannel, userChannel } from '@/lib/realtime/channels'
+import { useRealtimeReconnect } from '@/hooks/useRealtimeReconnect'
 
 interface ChatPanelProps {
   campaignId: string;
@@ -54,6 +55,12 @@ export default function ChatPanel({
     fetchMessages();
     fetchCampaignMembers();
   }, [campaignId, sceneId]);
+
+  // #502: chat after the initial load is entirely event-driven, and Pusher
+  // events published while disconnected are gone. So a dropped connection
+  // did not degrade this panel, it froze it — indistinguishable from a
+  // quiet table, with nothing prompting a reload. Re-read on recovery.
+  useRealtimeReconnect(() => { fetchMessages(); });
 
   // Set up real-time subscriptions
   useEffect(() => {

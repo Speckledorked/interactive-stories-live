@@ -41,6 +41,30 @@ function getPusherServer(): Pusher | null {
   return pusherServer;
 }
 
+/**
+ * Publish, and never throw (#502).
+ *
+ * Realtime is an enhancement on top of state that is already persisted:
+ * every event below corresponds to a row the client can refetch. So a
+ * Pusher outage must cost a live update, never the write that caused it —
+ * a typing indicator that 500s, or a notification whose DB row exists but
+ * whose creating request failed, are strictly worse outcomes than a quiet
+ * refresh.
+ *
+ * Most call sites had already learned this the hard way and wrapped their
+ * own try/catch, which is the tell: the same five lines repeated at a dozen
+ * sites, with the ones that forgot indistinguishable from the ones that
+ * decided. Putting it here makes "must not fail the caller" a property of
+ * publishing rather than a habit each caller has to remember.
+ */
+async function publish(pusher: Pusher, channel: string, event: string, payload: unknown): Promise<void> {
+  try {
+    await pusher.trigger(channel, event, payload)
+  } catch (error) {
+    console.error(`Failed to publish ${event} to ${channel} (non-critical):`, error)
+  }
+}
+
 // Trigger new message to campaign channel
 export async function triggerNewMessage(message: RealtimeMessage) {
   const pusher = getPusherServer();
@@ -48,14 +72,16 @@ export async function triggerNewMessage(message: RealtimeMessage) {
 
   // Send to campaign channel (for public messages)
   if (!message.targetUserId) {
-    await pusher.trigger(campaignChannel(message.campaignId), 'new-message', message);
+    await publish(pusher, campaignChannel(message.campaignId), 'new-message', message);
   }
 
   // Send to whisper recipient (for private messages)
   if (message.type === 'WHISPER' && message.targetUserId) {
-    await pusher.trigger(userChannel(message.targetUserId), 'new-whisper', message);
-    // Also send to sender so they see their own whisper
-    await pusher.trigger(userChannel(message.authorId), 'new-whisper', message);
+    await publish(pusher, userChannel(message.targetUserId), 'new-whisper', message);
+    // Also send to sender so they see their own whisper. A separate publish
+    // rather than a second channel on the same call, so a failure delivering
+    // to the recipient cannot also swallow the sender's own echo.
+    await publish(pusher, userChannel(message.authorId), 'new-whisper', message);
   }
 }
 
@@ -72,7 +98,7 @@ export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
 
   // Only trigger for shared notes or GM notes
   if (noteUpdate.visibility === 'SHARED' || noteUpdate.visibility === 'GM') {
-    await pusher.trigger(campaignChannel(noteUpdate.campaignId), 'note-update', noteUpdate);
+    await publish(pusher, campaignChannel(noteUpdate.campaignId), 'note-update', noteUpdate);
   }
 }
 
@@ -94,7 +120,7 @@ export async function triggerUserTyping(campaignId: string, userId: string, user
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
 
-  await pusher.trigger(campaignChannel(campaignId), 'user-typing', {
+  await publish(pusher, campaignChannel(campaignId), 'user-typing', {
     userId,
     userName,
     isTyping,
@@ -115,7 +141,7 @@ export async function triggerNotificationUpdate(userId: string, notification: an
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
 
-  await pusher.trigger(userChannel(userId), 'notification-received', {
+  await publish(pusher, userChannel(userId), 'notification-received', {
     ...notification,
     timestamp: new Date().toISOString()
   });

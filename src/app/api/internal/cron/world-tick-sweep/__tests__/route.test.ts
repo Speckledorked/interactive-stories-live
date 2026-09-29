@@ -37,7 +37,7 @@ beforeEach(() => {
   ;(TurnTracker.sendPeriodicReminders as any).mockResolvedValue(undefined)
   ;(TurnTracker.checkExpiredTurns as any).mockResolvedValue(0)
   ;(TurnTracker.notifyOverdueTurns as any).mockResolvedValue(0)
-  ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0, tickedCampaignIds: [] })
+  ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0, skippedOutOfTime: 0, tickedCampaignIds: [] })
 })
 
 afterEach(() => {
@@ -63,11 +63,11 @@ describe('GET', () => {
   })
 
   it('runs the sweep and returns its result for the correct secret', async () => {
-    ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, tickedCampaignIds: [] })
+    ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, skippedOutOfTime: 0, tickedCampaignIds: [] })
     const response = await GET(req('sweep-secret'))
     const body = await response.json()
     expect(response.status).toBe(200)
-    expect(body).toEqual({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, tickedCampaignIds: [], prunedRows: 0 })
+    expect(body).toEqual({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, skippedOutOfTime: 0, tickedCampaignIds: [], prunedRows: 0 })
   })
 
   it('does not abort the sweep when a maintenance step throws', async () => {

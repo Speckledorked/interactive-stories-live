@@ -16,6 +16,7 @@ vi.mock('@/lib/rateLimit', () => ({
 }))
 vi.mock('@/lib/game/sceneResolver', () => ({ getCurrentScene: vi.fn() }))
 vi.mock('@/lib/game/resolutionQueue', () => ({ enqueueSceneResolution: vi.fn() }))
+vi.mock('@/lib/game/resolutionBilling', () => ({ preflightSceneBilling: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { campaign: { findUnique: vi.fn() }, scene: { findFirst: vi.fn() } },
 }))
@@ -24,6 +25,7 @@ import { requireAuth } from '@/lib/auth'
 import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { getCurrentScene } from '@/lib/game/sceneResolver'
 import { enqueueSceneResolution } from '@/lib/game/resolutionQueue'
+import { preflightSceneBilling } from '@/lib/game/resolutionBilling'
 import { prisma } from '@/lib/prisma'
 import { POST } from '../route'
 
@@ -47,6 +49,7 @@ beforeEach(() => {
   })
   ;(getCurrentScene as any).mockResolvedValue({ id: 's1', sceneNumber: 3, playerActions: [{ id: 'a1' }] })
   ;(enqueueSceneResolution as any).mockResolvedValue({ jobId: 'job1', deduped: false })
+  ;(preflightSceneBilling as any).mockResolvedValue({ ok: true })
 })
 
 describe('POST', () => {
@@ -105,5 +108,30 @@ describe('POST', () => {
     expect(response.status).toBe(202)
     expect(body).toEqual(expect.objectContaining({ success: true, jobId: 'job1', sceneNumber: 3 }))
     expect(enqueueSceneResolution).toHaveBeenCalledWith('camp1', 's1')
+  })
+})
+
+describe('POST balance preflight (#487)', () => {
+  it('refuses with 402 rather than enqueueing work nobody can pay for', async () => {
+    // This route used to enqueue unconditionally, documented as "free".
+    // Free to the player, not to the deployment: each enqueue runs the
+    // full pipeline in the internal worker, and a zero-balance player
+    // could repeat that indefinitely because the only refusal was at
+    // scene end.
+    ;(preflightSceneBilling as any).mockResolvedValue({
+      ok: false,
+      error: 'Insufficient balance',
+      details: 'Bo (has $0.01, needs $0.20)',
+    })
+
+    const response = await POST(req(), { params: { id: 'camp1' } })
+
+    expect(response.status).toBe(402)
+    expect(enqueueSceneResolution).not.toHaveBeenCalled()
+  })
+
+  it('preflights the scene it is about to resolve', async () => {
+    await POST(req(), { params: { id: 'camp1' } })
+    expect(preflightSceneBilling).toHaveBeenCalledWith('s1')
   })
 })

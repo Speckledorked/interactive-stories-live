@@ -117,6 +117,25 @@ export default function CampaignLobbyPage() {
       .then(json => {
         setAwayRecap(json?.recap ?? null)
         setAwayJournal(json?.journal ?? null)
+
+        // #505: the GET no longer advances the checkpoint — it is a safe
+        // method again. Acknowledging is a separate POST, sent only once
+        // the recap is actually in state and about to render, so a
+        // response lost in flight or a tab closed mid-load no longer
+        // consumes an absence the player never saw.
+        //
+        // The server returns a null checkpoint when there was nothing to
+        // show, which is #396's rule: an empty recap must not reset the
+        // window a returning player is waiting to accumulate.
+        if (!json?.checkpoint) return
+        void authenticatedFetch(`/api/campaigns/${campaignId}/away-recap`, {
+          method: 'POST',
+          body: JSON.stringify({ checkpoint: json.checkpoint }),
+        }).catch(() => {
+          // Best effort. A failed acknowledgement leaves the checkpoint
+          // where it was, so the next visit shows the same recap again —
+          // the safe direction to fail in.
+        })
       })
       .catch(() => {})
   }, [campaignId])

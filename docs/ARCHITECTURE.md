@@ -293,7 +293,7 @@ of the three tags is a bug in this list.
   characters, factions, locations, members, notes, npcs, scenes,
   friends, friends/requests — plus admin/analytics). Depth is no longer
   a prose caveat: `routeCoverageTier.test.ts` derives it.
-  <!-- derived:highRiskRouteCount=47 -->47 routes are HIGH RISK — they
+  <!-- derived:highRiskRouteCount=48 -->48 routes are HIGH RISK — they
   mutate, and touch money, access control, or state owned by someone other
   than the caller — and every one of them is checked to assert something
   beyond its status code, because an auth gate proves nobody anonymous got

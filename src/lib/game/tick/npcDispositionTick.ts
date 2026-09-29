@@ -76,6 +76,7 @@ export type DispositionDriftEventKind =
   | 'FACTION_WON'
   | 'FACTION_LOST'
   | 'FACTION_ABANDONED_THEM'
+  | 'FACTION_STEADIED'
   | 'GOAL_ACHIEVED'
   | 'HEARD_FACTION_FALL'
   | 'FACTION_MOBILIZED'
@@ -90,10 +91,22 @@ export interface DispositionDriftEvent {
 // Same scale as beliefTick.ts's DRIFT_AMOUNT — a small, bounded per-event
 // nudge, not a swing large enough to flip a disposition from one event.
 const DRIFT_AMOUNT = 4
-// Hearsay moves at half the direct rate — hearing that some faction fell
-// sows doubt, but it doesn't hit like watching your own faction bleed.
-// Deliberately a 1:2 ratio against DRIFT_AMOUNT, not an independent number.
-const HEARSAY_DRIFT_AMOUNT = 2
+// Hearsay moves at three-quarters the direct rate — hearing that some
+// faction fell sows doubt, but it doesn't hit like watching your own
+// faction bleed. Deliberately below DRIFT_AMOUNT, not an independent
+// number.
+const HEARSAY_DRIFT_AMOUNT = 3
+// A mobilization (your faction going to war) sharpens the survival
+// instinct harder than an ordinary event — the awareness of imminent
+// death is a stronger jolt than a faction's win or loss. Deliberately
+// double DRIFT_AMOUNT, named so the magnitude is visible at the call
+// site rather than a bare literal.
+const MOBILIZATION_SELF_PRESERVATION_DRIFT = 8
+// The treasury visibly running dry reads as mismanagement — a stronger
+// loyalty hit than an ordinary event, since it lands on the members
+// directly. Deliberately double DRIFT_AMOUNT, named for the same reason
+// as MOBILIZATION_SELF_PRESERVATION_DRIFT above.
+const TREASURY_COLLAPSE_LOYALTY_DRIFT = 8
 
 /**
  * Pure — no DB access. Folds a batch of this NPC's own recent events
@@ -130,12 +143,18 @@ export function decideDispositionDrift(current: NpcDisposition, recentEvents: Di
         }
         break
       // Watching your faction lose erodes faith in it and heightens the
-      // instinct to look out for yourself.
+      // instinct to look out for yourself — and it teaches that the
+      // leadership's gambles don't pay off, cooling the drive to want
+      // more. The ambition decay is what keeps the ambition-clock and
+      // coalition-joiner dovish-leader gates reachable: without it,
+      // ambition only ever ratcheted upward and those gates were
+      // permanently pinned open.
       case 'FACTION_LOST':
         next = {
           ...next,
           loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100),
           selfPreservation: clamp(next.selfPreservation + DRIFT_AMOUNT, 0, 100),
+          ambition: clamp(next.ambition - DRIFT_AMOUNT, 0, 100),
         }
         break
       // A faction visibly struggling in the wake of its own institutional
@@ -157,23 +176,41 @@ export function decideDispositionDrift(current: NpcDisposition, recentEvents: Di
       // Your faction going to war sharpens the survival instinct — the
       // mobilization every warDeclared/warJoined event marks. Not a
       // loyalty change: people can be both loyal and suddenly very aware
-      // they might die.
+      // they might die. A stronger jolt than an ordinary event (see
+      // MOBILIZATION_SELF_PRESERVATION_DRIFT).
       case 'FACTION_MOBILIZED':
-        next = { ...next, selfPreservation: clamp(next.selfPreservation + DRIFT_AMOUNT, 0, 100) }
+        next = { ...next, selfPreservation: clamp(next.selfPreservation + MOBILIZATION_SELF_PRESERVATION_DRIFT, 0, 100) }
         break
       // Your faction's grand project paying off breeds pride in it;
-      // watching it fail erodes faith in the leadership that gambled.
+      // watching it fail erodes faith in the leadership that gambled —
+      // and cools the drive to back the next one. Same ambition-decay
+      // reasoning as FACTION_LOST above: failed gambles must be able to
+      // bring ambition back down, or the ambition-clock gates never
+      // close.
       case 'AMBITION_SUCCEEDED':
         next = { ...next, loyalty: clamp(next.loyalty + DRIFT_AMOUNT, 0, 100) }
         break
       case 'AMBITION_FAILED':
-        next = { ...next, loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100) }
+        next = {
+          ...next,
+          loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100),
+          ambition: clamp(next.ambition - DRIFT_AMOUNT, 0, 100),
+        }
         break
       // The treasury visibly running dry reads as mismanagement to the
       // members left holding the bag — a loyalty hit, but only on the
-      // band transition INTO low, not on every wobble of the balance.
+      // band transition INTO low, not on every wobble of the balance. A
+      // stronger hit than an ordinary event (see
+      // TREASURY_COLLAPSE_LOYALTY_DRIFT).
       case 'TREASURY_COLLAPSED':
-        next = { ...next, loyalty: clamp(next.loyalty - DRIFT_AMOUNT, 0, 100) }
+        next = { ...next, loyalty: clamp(next.loyalty - TREASURY_COLLAPSE_LOYALTY_DRIFT, 0, 100) }
+        break
+      // The wake of a loss fading out steadies the faction — members
+      // feel the institution recovering and recommit a little. The
+      // counterpart of FACTION_ABANDONED_THEM: grief arriving read as
+      // abandonment, grief lifting reads as steadiness.
+      case 'FACTION_STEADIED':
+        next = { ...next, loyalty: clamp(next.loyalty + DRIFT_AMOUNT, 0, 100) }
         break
     }
   }
@@ -240,6 +277,26 @@ function classifyFactionEvent(row: {
     const next = Number(row.newValue)
     if (Number.isFinite(prev) && Number.isFinite(next) && band(prev) !== 'LOW' && band(next) === 'LOW') {
       return { kind: 'TREASURY_COLLAPSED' }
+    }
+    return null
+  }
+  // A wake resolving restores stability — the grief fading back out,
+  // which reads as the institution steadying rather than falling apart.
+  // Checked BEFORE the abandonment branch below: this shape (wake +
+  // positive stability move) must resolve as recovery, never as a loss.
+  // #103's wakeTick.ts tags the resolution-side change
+  // wakeSourceType: 'RESOLUTION'; the abandonment branch below keys on
+  // 'NPC' | 'FACTION', so the two can never match the same row — the
+  // ordering is defense in depth.
+  if (
+    row.type === 'faction.stability' &&
+    row.origin === 'wake' &&
+    row.wakeSourceType === 'RESOLUTION'
+  ) {
+    const prev = Number(row.previousValue)
+    const next = Number(row.newValue)
+    if (Number.isFinite(prev) && Number.isFinite(next) && next > prev) {
+      return { kind: 'FACTION_STEADIED' }
     }
     return null
   }

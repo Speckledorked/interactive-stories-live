@@ -60,37 +60,60 @@ const MAX_JOINERS_PER_SIDE_PER_TICK = 1 // a war spreads gradually, not all at o
 // contested ground is in severe weather (see isSevereWeather in
 // weatherTick.ts). Symmetric by design: weather doesn't take sides.
 const SEVERE_WEATHER_EXTRA_MILITARY_ATTRITION = 1
-// A faction whose influence has been bled dry (LOW band) can't rally for a
-// new war — nobody follows a spent power into another fight. This is the
-// first tick-handler read of Faction.influence (#218 wrote it; the AI
-// layer was its only reader until now).
-const INFLUENCE_DECLARATION_FLOOR = MEDIUM_BAND_MIN
+// A faction whose influence has been bled below 45 can't rally for a new
+// war — nobody follows a spent power into another fight. Set deliberately
+// above the MEDIUM band floor (34): a faction dented by one lost war
+// (influence -8 per decisive loss, see the resolution path) still has
+// standing, but two lost wars' worth of bleeding leaves it unable to
+// recruit anyone into a fresh fight. This is the first tick-handler read
+// of Faction.influence (#218 wrote it; the AI layer was its only reader
+// until now).
+const INFLUENCE_DECLARATION_FLOOR = 45
 // Threat deters: threatLevel runs 1-5 (clamped in ambitionResolution.ts),
-// and at 4-5 the defender is a known terror — conquest/smear ambitions
+// and at 3+ the defender is a known terror — conquest/smear ambitions
 // that raise threat now buy real deterrence instead of stat decoration.
-const THREAT_DETERRENCE_LEVEL = 4
+// Three is the midpoint of the scale: a defender that's merely notorious,
+// not only the apex predators at 4-5, is enough to make an attacker
+// think twice.
+const THREAT_DETERRENCE_LEVEL = 3
 // A crumbling defender (LOW stability) lowers the bar for the attacker:
 // striking a faction that's already falling apart takes less of an army
 // than meeting a solid one in the field.
-const CRUMBLING_DEFENDER_ADVANTAGE = 10
+const CRUMBLING_DEFENDER_ADVANTAGE = 20
 // A leader whose self-preservation is this high never gambles the faction
 // on a war of choice — the survival instinct that keeps an NPC alive
 // (see migrationTick's FLIGHT_STAY_THRESHOLD) vetoes aggression here.
-const SELF_PRESERVATION_DECLARATION_VETO = 80
+const SELF_PRESERVATION_DECLARATION_VETO = 70
+// A DEFAULTED debt blocks war declarations only while it's fresh: a
+// faction whose last default is this many turns or fewer behind it can't
+// fund a war of conquest. Older than that, the reputational dues are
+// paid — a stale default is forgiven, while a legacy DEFAULTED row with
+// no turnResolved counts as this turn (still blocking, per #418's
+// "unknown default date = cooldown still in force" convention).
+const DEFAULTED_DECLARATION_BLOCK_TURNS = 15
 // A battlefield ground to ruin punishes whoever keeps fighting there —
 // scorched earth has a cost. Mirrors migrationTick's DISTRESS_THRESHOLD:
 // below 25/100 a location is distressed, and fighting on distressed ground
 // bleeds both armies. Symmetric, like the weather attrition above.
 const RUINED_BATTLEFIELD_CONDITION = 25
-const RUINED_BATTLEFIELD_EXTRA_MILITARY_ATTRITION = 1
-// An attacker with no working supply route to the front bleeds extra —
-// overextension is punishable. Defender-side only in effect: the defender
-// fights on home ground. See hasWorkingRoute in logisticsTick.ts.
+const RUINED_BATTLEFIELD_EXTRA_MILITARY_ATTRITION = 2
+// No working supply route to the front: the attacker bleeds extra. Called
+// the expeditionary tax honestly: battlefield routes are blockaded the
+// moment war ignites, and the route finder only follows same-owner
+// territory — so a "working route" to a contested front is near-
+// unsatisfiable mid-war. This attrition is therefore a standing cost the
+// attacker pays every turn of the war, not a check a well-supplied army
+// can pass. Deliberately NOT re-engineered to evaluate pre-blockade
+// routes: the flat tax models overextension simply, and the honest name
+// matters more than the flattering one. Attacker-side only — the
+// defender fights on home ground. See hasWorkingRoute in logisticsTick.ts.
 const NO_SUPPLY_EXTRA_ATTACKER_MILITARY_ATTRITION = 1
 // Winter campaigns bleed both armies — frozen supply lines, exposure,
-// desertion. Same scale as the other environmental attritions: winter is a
-// condition of the world, not a decisive weapon.
-const WINTER_EXTRA_MILITARY_ATTRITION = 1
+// desertion. Symmetric like weather and ruin: cold doesn't take sides.
+// Winter bites harder than a storm now (a storm is a day's fury; a season
+// of frozen supply lines is a campaign's attrition) — still a condition
+// of the world, not one side's decisive weapon.
+const WINTER_EXTRA_MILITARY_ATTRITION = 2
 
 export interface WarDeclarationDecision {
   shouldDeclare: boolean
@@ -113,12 +136,13 @@ export interface WarDeclarationDecision {
    */
   dovishLeader?: boolean
   /**
-   * Set when the prospective attacker has a DEFAULTED debt — a broke
-   * faction can't fund a war of conquest.
+   * Set when the prospective attacker has a DEFAULTED debt within the last
+   * DEFAULTED_DECLARATION_BLOCK_TURNS turns — a broke faction can't fund a
+   * war of conquest, but a stale default is forgiven.
    */
   defaultedDebt?: boolean
   /**
-   * Set when the defender's threat level (4-5 on the 1-5 scale) deterred
+   * Set when the defender's threat level (3-5 on the 1-5 scale) deterred
    * the attack.
    */
   threatDeterrence?: boolean
@@ -223,14 +247,21 @@ export function warExhaustionRemaining(
  *
  * `influence` is likewise optional for the same reason: callers that don't
  * have it pass nothing and get the pre-influence behavior. When present
- * and in the LOW band, the attacker sits the war out — a faction bled dry
- * by lost wars (influence -8 per decisive loss, see the resolution path)
- * can't rally anyone into a new fight.
+ * and below INFLUENCE_DECLARATION_FLOOR (45), the attacker sits the war
+ * out — a faction bled by lost wars (influence -8 per decisive loss, see
+ * the resolution path) can't rally anyone into a new fight.
  *
- * `leaderAmbition`, `isDefaulted`, and `threatLevel` follow the same
+ * `leaderAmbition` and `threatLevel` follow the same
  * optional contract: a dovish leader (ambition below the MEDIUM band
- * floor) won't start a war, a DEFAULTED debtor can't fund one, and a
- * defender at threat 4-5 deters the attack outright.
+ * floor) won't start a war, and a defender at threat 3-5 deters the
+ * attack outright.
+ *
+ * `defaultedTurnsAgo` replaces the old `isDefaulted` boolean: the
+ * declaration gate is now recency-scoped rather than a permanent brand.
+ * Undefined means no default on record (the old no-block behavior);
+ * a value of 0 (a default this turn, or a legacy row with no turnResolved)
+ * through DEFAULTED_DECLARATION_BLOCK_TURNS blocks the declaration, and
+ * anything older is forgiven.
  *
  * `goal`, `stability`, and `leaderSelfPreservation` extend the same
  * contract: only EXPAND/DESTABILIZE_RIVAL factions declare offensive
@@ -244,7 +275,13 @@ export function decideWarDeclaration(
     military: number
     influence?: number
     leaderAmbition?: number
-    isDefaulted?: boolean
+    /**
+     * Turns since the attacker's most recent DEFAULTED debt (undefined =
+     * none on record). Blocks the declaration when within
+     * DEFAULTED_DECLARATION_BLOCK_TURNS; a legacy row with no turnResolved
+     * arrives as 0, still blocking per #418.
+     */
+    defaultedTurnsAgo?: number
     goal?: FactionGoal
     stability?: number
     leaderSelfPreservation?: number
@@ -273,7 +310,10 @@ export function decideWarDeclaration(
     return { shouldDeclare: false, dovishLeader: true }
   }
 
-  if (attacker.isDefaulted) {
+  if (
+    attacker.defaultedTurnsAgo !== undefined &&
+    attacker.defaultedTurnsAgo <= DEFAULTED_DECLARATION_BLOCK_TURNS
+  ) {
     return { shouldDeclare: false, defaultedDebt: true }
   }
 
@@ -689,6 +729,44 @@ async function resolveWarProgress(
       }
     }
 
+    // The attrition writes above go out via faction.update with no
+    // WorldChange, so npcDispositionTick's treasury-collapse classifier
+    // never saw war-driven LOW transitions — a faction could bleed to
+    // zero resources sustaining a war and the treasury read stayed blind.
+    // One resources change per participant fixes the read. significant:
+    // false keeps these out of history/rumor spam; the disposition
+    // reader has no significance filter on its faction-event query, so it
+    // still sees the LOW transition. Pushed outside the dryRun guard,
+    // like every other change this function emits.
+    for (const p of attackerSide) {
+      changes.push({
+        entityType: 'FACTION',
+        entityId: p.factionId,
+        entityName: p.faction.name,
+        campaignId: ctx.campaignId,
+        field: 'resources',
+        previousValue: p.faction.resources,
+        newValue: clamp(p.faction.resources + progress.attackerResourceDelta, 0, 100),
+        reason: `${p.faction.name} burns resources sustaining the war effort`,
+        significant: false,
+        importance: 'MINOR',
+      })
+    }
+    for (const p of defenderSide) {
+      changes.push({
+        entityType: 'FACTION',
+        entityId: p.factionId,
+        entityName: p.faction.name,
+        campaignId: ctx.campaignId,
+        field: 'resources',
+        previousValue: p.faction.resources,
+        newValue: clamp(p.faction.resources + progress.defenderResourceDelta, 0, 100),
+        reason: `${p.faction.name} burns resources sustaining the war effort`,
+        significant: false,
+        importance: 'MINOR',
+      })
+    }
+
     const turnsElapsed = ctx.turnNumber - war.startedTurn
     const resolution = decideWarResolution(newMomentum, turnsElapsed)
 
@@ -961,12 +1039,26 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
   }
 
   // A DEFAULTED debtor can't fund a war of conquest — one batched read
-  // for the whole declaration pass.
+  // for the whole declaration pass. The block is recency-scoped: the pure
+  // gate takes each faction's most-recent default turn (via
+  // `turnResolved`, which is why it's selected), and a legacy row with a
+  // NULL turnResolved counts as 0 turns ago — an unknown default date is
+  // not evidence the block has elapsed (#418's convention).
   const defaultedDebts = await ctx.db.factionDebt.findMany({
     where: { campaignId: ctx.campaignId, status: 'DEFAULTED', debtorFactionId: { in: factions.map((f) => f.id) } },
-    select: { debtorFactionId: true },
+    select: { debtorFactionId: true, turnResolved: true },
   })
-  const defaultedFactionIds = new Set(defaultedDebts.map((d) => d.debtorFactionId))
+  const defaultedTurnsAgoByFaction = new Map<string, number>()
+  for (const d of defaultedDebts) {
+    const turnsAgo =
+      d.turnResolved === null || d.turnResolved === undefined ? 0 : ctx.turnNumber - d.turnResolved
+    const current = defaultedTurnsAgoByFaction.get(d.debtorFactionId)
+    // Most recent default sets the clock: the freshest debt is the one
+    // that blocks.
+    if (current === undefined || turnsAgo < current) {
+      defaultedTurnsAgoByFaction.set(d.debtorFactionId, turnsAgo)
+    }
+  }
 
   for (const defender of factions) {
     if (factionIdsAtWar.has(defender.id)) continue
@@ -985,7 +1077,7 @@ async function declareNewWars(ctx: TickContext, factionIdsAtWar: Set<string>): P
         ...attacker,
         leaderAmbition: leaderAmbitionByFaction.get(attacker.id),
         leaderSelfPreservation: leaderSelfPreservationByFaction.get(attacker.id),
-        isDefaulted: defaultedFactionIds.has(attacker.id),
+        defaultedTurnsAgo: defaultedTurnsAgoByFaction.get(attacker.id),
       },
       defender,
       locations,

@@ -55,8 +55,8 @@ export interface ExtractionLocation {
   resourceSlots: string[]
   ownerFactionId: string | null
   /**
-   * Location.population, or null/undefined when untracked. A tracked zero
-   * (or negative, clamped) means a ghost town: no hands to work the
+   * Location.population, or null/undefined when untracked. A tracked
+   * population of 10 or fewer means a ghost town: no hands to work the
    * slots, so no yield. Null/undefined keeps the legacy behavior exactly
    * (see the null-vs-0 convention in factionTick.ts).
    */
@@ -64,8 +64,9 @@ export interface ExtractionLocation {
   /**
    * Location.conditionScore, or null/undefined when untracked. Uses the
    * same closed tag vocabulary as deriveConditionTags: ABANDONED ground
-   * yields nothing, RUINED ground yields half. Null/undefined keeps the
-   * legacy full yield — same null-vs-absent convention as population.
+   * yields nothing, RUINED ground yields a quarter, DAMAGED ground
+   * yields half. Null/undefined keeps the legacy full yield — same
+   * null-vs-absent convention as population.
    */
   conditionScore?: number | null
 }
@@ -189,23 +190,26 @@ export function decideExtraction(
   for (const location of locations) {
     if (location.resourceSlots.length === 0) continue
     if (!location.ownerFactionId) continue
-    // Ghost towns extract nothing: a tracked zero (or less) population
+    // Ghost towns extract nothing: a tracked population of 10 or fewer
     // means no hands to work the resource slots. Untracked (null/
     // undefined) keeps the legacy yield — same null-vs-0 convention as
     // factionTick's population manpower bonus.
     const population = location.population ?? null
-    if (population !== null && population <= 0) continue
+    if (population !== null && population <= 10) continue
 
-    // Ruined ground is picked-over ground: ABANDONED sites yield nothing
-    // at all, RUINED sites yield half. The tags are derived, not
-    // hardcoded, so "ruined" always means what locationConditionTick
-    // says it means. Untracked condition keeps the legacy full yield.
+    // Damaged ground is picked-over ground: ABANDONED sites yield nothing
+    // at all, RUINED sites yield a quarter, DAMAGED sites yield half. The
+    // tags are derived, not hardcoded, so "ruined" always means what
+    // locationConditionTick says it means (RUINED < 25, DAMAGED < 50 —
+    // the same cutoffs this wiring wants). Untracked condition keeps the
+    // legacy full yield.
     const condition = location.conditionScore ?? null
     let conditionMultiplier = 1
     if (condition !== null) {
       const tags = deriveConditionTags(condition, false)
       if (tags.includes('ABANDONED')) continue
-      if (tags.includes('RUINED')) conditionMultiplier = 0.5
+      if (tags.includes('RUINED')) conditionMultiplier = 0.25
+      else if (tags.includes('DAMAGED')) conditionMultiplier = 0.5
     }
 
     const ownedCount = ownedCounts.get(location.ownerFactionId) ?? 0

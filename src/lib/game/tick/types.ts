@@ -28,7 +28,7 @@ export interface WorldChange {
   /** Whether this change is worth a history/RAG entry, vs. routine tick noise. */
   significant: boolean
   /** Importance to use if this change is logged to campaign history. */
-  importance: 'NORMAL' | 'MAJOR'
+  importance: 'NORMAL' | 'MAJOR' | 'MINOR'
   /**
    * Where this change came from. Defaults to the autonomous world tick when
    * omitted. 'consequence' changes are player-caused (see src/lib/game/consequences.ts)
@@ -72,8 +72,11 @@ export interface WorldChange {
    * FACTION_ABANDONED_THEM classification and beliefTick.ts's
    * COLLAPSE_RIPPLE_SURVIVED classification, both of which now branch on
    * this field instead of inferring cause purely from origin: 'wake'.
+   * 'RESOLUTION' marks the RECOVERY-side change wakeTick.ts emits when a
+   * wake finishes fading out — a positive stability move, classified by
+   * npcDispositionTick.ts as FACTION_STEADIED rather than abandonment.
    */
-  wakeSourceType?: 'NPC' | 'FACTION' | 'FACTION_DEFAULT'
+  wakeSourceType?: 'NPC' | 'FACTION' | 'FACTION_DEFAULT' | 'RESOLUTION'
   /**
    * #101 v1.1: where this change actually happened, captured at write time
    * (e.g. an NPC's or a war's contested location) — used by

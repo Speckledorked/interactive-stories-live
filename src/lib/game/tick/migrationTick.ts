@@ -38,7 +38,7 @@ import { AdjacencyEdge, shortestPath } from '../worldGraph'
 import { NEUTRAL_DISPOSITION, parseDisposition } from './npcDispositionTick'
 import { isSevereWeather } from './weatherTick'
 import { TIE_INCLUDE, factionTies } from '../tieGraph'
-import type { WeatherCondition } from '@prisma/client'
+import type { EventWitnessDistortion, WeatherCondition } from '@prisma/client'
 
 // RUINED/ABANDONED band boundary — the same bar
 // locationConditionTick.ts's SITE_CONDITION_PENALTY_THRESHOLD (resolution.ts)
@@ -99,8 +99,9 @@ export interface DistressedLocationInput {
   conditionScore: number
   population: number | null
   /** Owning faction, when the location has one. Used to look up that
-   * faction's rival — refugees don't flee into their faction's rival's
-   * arms. Absent, no rival filtering applies (pre-#17 behavior exactly). */
+   * faction's rival — destinations owned by the rival take a −10 score
+   * penalty, not an exclusion. Absent, no rival penalty applies
+   * (pre-#17 behavior exactly). */
   ownerFactionId?: string | null
 }
 
@@ -119,9 +120,9 @@ export interface DestinationLocationInput {
    * The owning faction's resources/stability. Refugees read the room: a
    * destination whose owner is LOW on either counts as less desirable —
    * a well-kept town owned by a starving, crumbling faction is a haven
-   * with an expiry date. Each LOW band adds one penalty step in the
-   * destination sort (below the location's own condition, above weather).
-   * Absent (or ownerless), no penalty — pre-#11 behavior exactly.
+   * with an expiry date. Each LOW band costs 15 score points via
+   * destinationScore below. Absent (or ownerless), no penalty —
+   * pre-#11 behavior exactly.
    */
   ownerFactionResources?: number | null
   ownerFactionStability?: number | null
@@ -142,9 +143,9 @@ export interface MigratingNpcInput {
   isAlive: boolean
   /** NPC motivation model — optional, falls back to NEUTRAL_DISPOSITION.selfPreservation (50) when absent. Higher flees sooner; below FLIGHT_STAY_THRESHOLD, an NPC never flees at all. */
   selfPreservation?: number
-  /** Affiliated faction, when the NPC has one. A refugee won't flee to a
-   * destination owned by their own faction's RIVAL. Absent, only the
-   * source location's owner-rival filter applies. */
+  /** Affiliated faction, when the NPC has one. Destinations owned by
+   * their faction's RIVAL take a −10 score penalty. Absent, only the
+   * source location's owner-rival penalty applies. */
   factionId?: string | null
 }
 
@@ -171,31 +172,74 @@ export function ownerDistressPenalty(destination: DestinationLocationInput): num
   return penalty
 }
 
+/** Pure — how much a refugee values a destination: its own condition
+ * score, minus 15 for every LOW health signal on its owning faction (a
+ * haven whose owner is starving or crumbling has an expiry date), minus
+ * 10 when the destination is owned by the fleeing party's faction's rival
+ * (refugees would rather not flee into the rival's arms — a preference,
+ * not a veto). Exported for unit tests. */
+export function destinationScore(d: DestinationLocationInput, rivalId?: string | null): number {
+  return (
+    d.conditionScore -
+    15 * ownerDistressPenalty(d) -
+    (rivalId && d.ownerFactionId === rivalId ? 10 : 0)
+  )
+}
+
 /**
- * The highest-condition destination reachable from `locationId` via the
+ * Pure — what an NPC believes a heard condition score was. Distortion
+ * shifts the PERCEIVED score: EXAGGERATED rumors sound worse than truth
+ * (perceived −20), MINIMIZED rumors sound better (perceived +20); other
+ * flavors (GARBLED_DETAIL, ATTRIBUTED_WRONG) don't move the score.
+ * Undistorted rows report the true value. Doom is tested against the
+ * perceived score — the NPC acts on what they believe they heard, not
+ * the ground truth. Exported for unit tests.
+ */
+export function perceivedConditionScore(
+  actualScore: number,
+  distorted: boolean,
+  distortionFlavor: EventWitnessDistortion | null | undefined
+): number {
+  if (!distorted) return actualScore
+  if (distortionFlavor === 'EXAGGERATED') return actualScore - 20
+  if (distortionFlavor === 'MINIMIZED') return actualScore + 20
+  return actualScore
+}
+
+/**
+ * The highest-scoring destination reachable from `locationId` via the
  * real adjacency graph, or — when `edges` is empty or none of the
  * candidates are reachable in it (no graph data covers this campaign or
- * this location yet) — the highest-condition destination campaign-wide,
- * exactly like before #108. `sortedDestinations` is already
- * highest-condition-first, so both branches just take the first match.
+ * this location yet) — the highest-scoring destination campaign-wide,
+ * exactly like before #108. Both branches just take the first match of
+ * the rival-aware sort.
  *
- * `avoidOwnerFactionId` excludes destinations owned by that faction
- * (refugees don't flee to their faction's rival) — but exclusion is a
- * preference, not a veto: when every viable destination is
- * rival-owned, the best of them still wins. Routine beats paralysis.
+ * `rivalId` applies the rival penalty inside destinationScore (refugees
+ * avoid the rival's ground as a preference, not a veto: when every
+ * viable destination is rival-owned, the best of them still wins).
+ * `sortedByRival` memoizes the sort per rivalId — the caller loops many
+ * locations but sorts at most once per distinct rival.
  */
 function pickDestination(
   locationId: string,
-  sortedDestinations: DestinationLocationInput[],
+  candidateDestinations: DestinationLocationInput[],
   edges: AdjacencyEdge[],
-  avoidOwnerFactionId?: string | null
+  sortedByRival: Map<string | null, DestinationLocationInput[]>,
+  rivalId?: string | null
 ): DestinationLocationInput | null {
-  let candidates = sortedDestinations.filter((d) => d.id !== locationId)
-  if (candidates.length === 0) return null
-  if (avoidOwnerFactionId) {
-    const nonRival = candidates.filter((d) => d.ownerFactionId !== avoidOwnerFactionId)
-    if (nonRival.length > 0) candidates = nonRival
+  const key = rivalId ?? null
+  let sortedDestinations = sortedByRival.get(key)
+  if (!sortedDestinations) {
+    sortedDestinations = [...candidateDestinations].sort(
+      (a, b) =>
+        destinationScore(b, rivalId) - destinationScore(a, rivalId) ||
+        weatherPenalty(a) - weatherPenalty(b) ||
+        a.id.localeCompare(b.id)
+    )
+    sortedByRival.set(key, sortedDestinations)
   }
+  const candidates = sortedDestinations.filter((d) => d.id !== locationId)
+  if (candidates.length === 0) return null
   if (edges.length === 0) return candidates[0]
 
   const reachable = candidates.filter((d) => shortestPath(edges, locationId, d.id) !== null)
@@ -220,9 +264,10 @@ function pickDestination(
  * preserves the pre-hearsay behavior exactly.
  *
  * `rivalByFactionId` maps factionId -> its RIVAL factionId (see
- * findRivalId). Refugees avoid destinations owned by their faction's
- * rival — a preference, not a veto (see pickDestination). Empty by
- * default, which preserves the pre-rival behavior exactly.
+ * findRivalId). Destinations owned by the fleeing party's faction's
+ * rival take a −10 score penalty (see destinationScore) — a preference,
+ * not a veto (see pickDestination). Empty by default, which preserves
+ * the pre-rival behavior exactly.
  */
 export function decideMigration(
   distressedLocations: DistressedLocationInput[],
@@ -239,21 +284,15 @@ export function decideMigration(
     return { npcMoves, populationShifts: [], populationFlights: [] }
   }
 
-  // Highest-condition destination wins, deterministically — but refugees
-  // read the room: among equal condition scores, a destination whose
-  // owning faction is LOW on resources or stability sorts after one
-  // whose owner is healthy (a haven with an expiry date is a worse
-  // haven), and a destination in severe weather sorts after one in clear
-  // weather. Condition stays primary — owner health and weather are
-  // tie-breaks, not vetoes. Ties broken by id so the result never depends
-  // on query row order.
-  const sortedDestinations = [...candidateDestinations].sort(
-    (a, b) =>
-      b.conditionScore - a.conditionScore ||
-      ownerDistressPenalty(a) - ownerDistressPenalty(b) ||
-      weatherPenalty(a) - weatherPenalty(b) ||
-      a.id.localeCompare(b.id)
-  )
+  // Destination ranking is rival-AWARE, not exclusion-based: the sort
+  // lives inside pickDestination (see destinationScore), scored
+  // separately per fleeing party's rival — a destination owned by the
+  // faction's rival takes a −10 penalty but can still win when it's
+  // genuinely the best option. Weather stays a tie-break below the
+  // score, and id is the final tie-break so the result never depends on
+  // query row order. The sort is memoized per rivalId because the loop
+  // below picks for many locations and many NPCs.
+  const sortedByRival = new Map<string | null, DestinationLocationInput[]>()
 
   const nameById = new Map<string, string>()
   const workingPopulation = new Map<string, number>()
@@ -264,17 +303,18 @@ export function decideMigration(
 
   for (const location of distressedLocations) {
     if (location.conditionScore >= DISTRESS_THRESHOLD) continue
-    // Refugees don't flee to their faction's rival: the source-level
-    // exclusion uses the source location's owner. Each named NPC below
-    // re-checks against their OWN faction's rival when it differs from
-    // the source owner's — a guest's faction is theirs, not the town's.
+    // Refugees don't flee into their faction's rival's arms: the
+    // source-level rival penalty uses the source location's owner. Each
+    // named NPC below re-checks against their OWN faction's rival when
+    // it differs from the source owner's — a guest's faction is theirs,
+    // not the town's.
     const sourceRival = location.ownerFactionId ? rivalByFactionId.get(location.ownerFactionId) : undefined
-    const sourceDestination = pickDestination(location.id, sortedDestinations, edges, sourceRival)
+    const sourceDestination = pickDestination(location.id, candidateDestinations, edges, sortedByRival, sourceRival)
     if (!sourceDestination) continue
     const destinationForNpc = (npc: MigratingNpcInput): DestinationLocationInput | null => {
       const npcRival = npc.factionId ? rivalByFactionId.get(npc.factionId) : undefined
       if (npcRival && npcRival !== sourceRival) {
-        return pickDestination(location.id, sortedDestinations, edges, npcRival)
+        return pickDestination(location.id, candidateDestinations, edges, sortedByRival, npcRival)
       }
       return sourceDestination
     }
@@ -338,9 +378,9 @@ export function decideMigration(
     if (movedNpcIds.has(npcId)) continue
     if (selfPreservationOf(npc) < FLIGHT_STAY_THRESHOLD) continue
     // Hearsay flight is personal — the rumor belongs to the NPC, so the
-    // rival exclusion uses THEIR faction, not a source location owner's.
+    // rival penalty uses THEIR faction, not a source location owner's.
     const npcRival = npc.factionId ? rivalByFactionId.get(npc.factionId) : undefined
-    const destination = pickDestination(doomedLocationId, sortedDestinations, edges, npcRival)
+    const destination = pickDestination(doomedLocationId, candidateDestinations, edges, sortedByRival, npcRival)
     if (!destination) continue
     npcMoves.push({
       npcId: npc.id,
@@ -391,10 +431,20 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
 
   // Rumors re-enter the sim: NPCs who were TOLD (EventWitness, grade TOLD)
   // that their location is doomed flee on the rumor even when the score
-  // says the place is fine. Reads the location-condition WorldEvents the
-  // information bus already propagates — doom means the event's new
-  // condition score sits below DISTRESS_THRESHOLD. Distorted rows count:
-  // the NPC acts on what they believe they heard, not the ground truth.
+  // says the place is fine. Two rumor kinds:
+  //
+  // - location_condition.conditionScore rows: doom means the event's new
+  //   condition score sits below DISTRESS_THRESHOLD. The NPC acts on what
+  //   they believe they heard, not the ground truth — an EXAGGERATED
+  //   retelling shifts the perceived score −20 (worse than truth), a
+  //   MINIMIZED one +20 (better); other distortion flavors don't move it
+  //   (see perceivedConditionScore).
+  // - location_population.populationFlight rows: a large flight is itself
+  //   the doom signal — the flight IS the news, so the source location
+  //   (entityId on those rows) reads as doomed with no score to parse.
+  //   Reuses HEARSAY_DOOM_TURNS: a told flight stays actionable as long
+  //   as a told condition-doom does.
+  //
   // Dead NPCs are excluded by the isAlive filter on the NPC read below,
   // even when a stale TOLD row names them.
   const doomHearsay = await ctx.db.eventWitness.findMany({
@@ -403,18 +453,31 @@ export async function tickMigration(ctx: TickContext): Promise<TickHandlerResult
       grade: 'TOLD',
       npcId: { not: null },
       turnNumber: { gte: ctx.turnNumber - HEARSAY_DOOM_TURNS },
-      worldEvent: { type: 'location_condition.conditionScore' },
+      worldEvent: { type: { in: ['location_condition.conditionScore', 'location_population.populationFlight'] } },
     },
     select: {
       npcId: true,
-      worldEvent: { select: { targetId: true, newValue: true } },
+      distorted: true,
+      distortionFlavor: true,
+      worldEvent: { select: { targetId: true, newValue: true, type: true } },
     },
   })
   const hearsayDoom = new Map<string, string>()
   for (const row of doomHearsay) {
     if (!row.npcId) continue
+    // A large flight is itself the doom signal: the source location
+    // reads as doomed, no score to parse — the flight IS the news.
+    if (row.worldEvent.type === 'location_population.populationFlight') {
+      hearsayDoom.set(row.npcId, row.worldEvent.targetId)
+      continue
+    }
     const doomScore = parseInt(row.worldEvent.newValue ?? '', 10)
-    if (Number.isNaN(doomScore) || doomScore >= DISTRESS_THRESHOLD) continue
+    if (Number.isNaN(doomScore)) continue
+    // Test the doom threshold against the PERCEIVED score — distorted
+    // rumors move the NPC even when the true value wouldn't (or wouldn't
+    // have, when the rumor minimized a real doom).
+    const perceivedScore = perceivedConditionScore(doomScore, row.distorted, row.distortionFlavor)
+    if (perceivedScore >= DISTRESS_THRESHOLD) continue
     hearsayDoom.set(row.npcId, row.worldEvent.targetId)
   }
 

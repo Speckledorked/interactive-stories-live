@@ -96,8 +96,14 @@ describe('threat deters war declarations (decideWarDeclaration)', () => {
     expect(d.threatDeterrence).toBe(true)
   })
 
-  it('declares against a threat 3 defender', () => {
+  it('blocks declaration against a threat 3 defender', () => {
     const d = decideWarDeclaration(attacker, { id: 'def', military: 80, threatLevel: 3 }, locations)
+    expect(d.shouldDeclare).toBe(false)
+    expect(d.threatDeterrence).toBe(true)
+  })
+
+  it('declares against a threat 2 defender', () => {
+    const d = decideWarDeclaration(attacker, { id: 'def', military: 80, threatLevel: 2 }, locations)
     expect(d.shouldDeclare).toBe(true)
     expect(d.threatDeterrence).toBeUndefined()
   })
@@ -134,14 +140,26 @@ describe('defaulted debt blocks war declarations (decideWarDeclaration)', () => 
   const defender = { id: 'def', military: 80 }
   const locations = [{ id: 'prize', ownerFactionId: 'def', isContested: true }]
 
-  it('blocks declaration while the attacker is DEFAULTED', () => {
-    const d = decideWarDeclaration({ id: 'att', military: 80, isDefaulted: true }, defender, locations)
+  it('blocks declaration when the attacker defaulted 15 turns ago', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80, defaultedTurnsAgo: 15 }, defender, locations)
     expect(d.shouldDeclare).toBe(false)
     expect(d.defaultedDebt).toBe(true)
   })
 
-  it('declares when the attacker is not defaulted', () => {
-    const d = decideWarDeclaration({ id: 'att', military: 80, isDefaulted: false }, defender, locations)
+  it('blocks declaration when the attacker defaulted this turn', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80, defaultedTurnsAgo: 0 }, defender, locations)
+    expect(d.shouldDeclare).toBe(false)
+    expect(d.defaultedDebt).toBe(true)
+  })
+
+  it('declares once the default is 16 turns old — stale defaults are forgiven', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80, defaultedTurnsAgo: 16 }, defender, locations)
+    expect(d.shouldDeclare).toBe(true)
+    expect(d.defaultedDebt).toBeUndefined()
+  })
+
+  it('declares when no default is on record (undefined keeps the old no-block behavior)', () => {
+    const d = decideWarDeclaration({ id: 'att', military: 80 }, defender, locations)
     expect(d.shouldDeclare).toBe(true)
     expect(d.defaultedDebt).toBeUndefined()
   })
@@ -150,10 +168,10 @@ describe('defaulted debt blocks war declarations (decideWarDeclaration)', () => 
 describe('battlefield ruin bleeds armies (decideWarProgress)', () => {
   const war = { id: 'war-1' }
 
-  it('adds symmetric +1 military attrition on ruined ground (condition < 25)', () => {
+  it('adds symmetric +2 military attrition on ruined ground (condition < 25)', () => {
     const d = decideWarProgress(war, { military: 80 }, { military: 80 }, 5, undefined, 10)
-    expect(d.attackerMilitaryDelta).toBe(-3)
-    expect(d.defenderMilitaryDelta).toBe(-3)
+    expect(d.attackerMilitaryDelta).toBe(-4)
+    expect(d.defenderMilitaryDelta).toBe(-4)
     expect(d.attackerResourceDelta).toBe(-3)
   })
 
@@ -169,10 +187,10 @@ describe('battlefield ruin bleeds armies (decideWarProgress)', () => {
     expect(d.defenderMilitaryDelta).toBe(-2)
   })
 
-  it('stacks with severe weather (ruin + storm = -4 each side)', () => {
+  it('stacks with severe weather (ruin + storm = -5 each side)', () => {
     const d = decideWarProgress(war, { military: 80 }, { military: 80 }, 5, { condition: 'STORM', severity: 5 }, 10)
-    expect(d.attackerMilitaryDelta).toBe(-4)
-    expect(d.defenderMilitaryDelta).toBe(-4)
+    expect(d.attackerMilitaryDelta).toBe(-5)
+    expect(d.defenderMilitaryDelta).toBe(-5)
   })
 })
 
@@ -192,10 +210,10 @@ describe('cut supply lines bleed the attacker (decideWarProgress)', () => {
     expect(unknown.attackerMilitaryDelta).toBe(-2)
   })
 
-  it('stacks with ruin: cut supply on ruined ground hits the attacker for -4', () => {
+  it('stacks with ruin: cut supply on ruined ground hits the attacker for -5', () => {
     const d = decideWarProgress(war, { military: 80 }, { military: 80 }, 5, undefined, 10, true)
-    expect(d.attackerMilitaryDelta).toBe(-4)
-    expect(d.defenderMilitaryDelta).toBe(-3)
+    expect(d.attackerMilitaryDelta).toBe(-5)
+    expect(d.defenderMilitaryDelta).toBe(-4)
   })
 })
 

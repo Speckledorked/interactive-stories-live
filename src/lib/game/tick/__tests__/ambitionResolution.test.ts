@@ -128,4 +128,62 @@ describe('resolveCompletedAmbitions (#227)', () => {
       data: { resources: 67, stability: 51, military: 100, threatLevel: 3 },
     })
   })
+
+  // The goal-drift penalty (ambitionTick.ts): when the clock's goal has
+  // drifted off the faction's LIVE goal by resolution time, the success
+  // chance drops 15 before clamping. Fixture chosen so the deterministic
+  // roll (stableHash('faction-drift-1:drift-penalty-clock-18') % 100 ===
+  // 76) sits between the drifted chance (clamp(40 + 100*0.5, 40, 90) - 15
+  // = 75) and the clean chance (90) — a marginal success that drift
+  // turns into a failure. Not a mocked outcome: the penalty really flows
+  // through decideAmbitionOutcome.
+  it('applies the goal-drift penalty when the clock goal drifted off the live faction goal', async () => {
+    mocks.factionFindUnique.mockResolvedValueOnce(faction) // live goal ENRICH, clock goal DESTABILIZE_RIVAL
+
+    await resolveCompletedAmbitions('camp1', simTurn(5), [{ ...clock, id: 'drift-penalty-clock-18' }])
+
+    // A DESTABILIZE_RIVAL FAILURE applies resourceDelta -5 /
+    // stabilityDelta -3 / militaryDelta -4 / threatLevelDelta 0 (see
+    // decideAmbitionOutcome) — a success would instead apply -3 / +1 /
+    // +2 / +1. If the penalty never reached the resolver, this would
+    // assert the success numbers.
+    expect(mocks.factionUpdate).toHaveBeenCalledWith({
+      where: { id: 'faction-drift-1' },
+      data: { resources: 65, stability: 47, military: 96, threatLevel: 2 },
+    })
+  })
+
+  it('does not apply the goal-drift penalty when the clock goal still matches the live faction goal', async () => {
+    // Same roll (60) as the first test, same faction, but the clock's
+    // goal matches the live goal — no drift, no penalty. Using ENRICH
+    // for both: chance clamp(40 + 70*0.5, 40, 90) = 75, 60 < 75 succeeds;
+    // with the penalty (60) it would fail.
+    mocks.factionFindUnique.mockResolvedValueOnce(faction)
+
+    await resolveCompletedAmbitions('camp1', simTurn(5), [{ ...clock, goal: 'ENRICH' }])
+
+    // An ENRICH success applies resourceDelta +10 / stabilityDelta +2 /
+    // militaryDelta +0 / threatLevelDelta +1 — a drift-penalized failure
+    // would instead apply -5 / -3 / -4 / 0.
+    expect(mocks.factionUpdate).toHaveBeenCalledWith({
+      where: { id: 'faction-drift-1' },
+      data: { resources: 80, stability: 52, military: 100, threatLevel: 3 },
+    })
+  })
+
+  it('does not apply the goal-drift penalty for a legacy clock with no stored goal', async () => {
+    // clock.goal null -> resolver falls back to faction.goal, and the
+    // drift flag (clock.goal !== faction.goal) is false for a missing
+    // goal — a clock that never stored one can't have drifted.
+    mocks.factionFindUnique.mockResolvedValueOnce({ ...faction, goal: 'DESTABILIZE_RIVAL' })
+
+    await resolveCompletedAmbitions('camp1', simTurn(5), [{ ...clock, id: 'drift-penalty-clock-18', goal: null }])
+
+    // Same clock id as the drifted test (roll 76) but no penalty: clean
+    // DESTABILIZE_RIVAL chance at military=100 is 90, 76 < 90 succeeds.
+    expect(mocks.factionUpdate).toHaveBeenCalledWith({
+      where: { id: 'faction-drift-1' },
+      data: { resources: 67, stability: 51, military: 100, threatLevel: 3 },
+    })
+  })
 })

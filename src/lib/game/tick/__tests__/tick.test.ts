@@ -263,6 +263,38 @@ describe('decideFactionCollapse', () => {
     expect(result.transferResources).toBeGreaterThan(0)
     expect(result.transferMilitary).toBeGreaterThan(0)
   })
+
+  // The collapse THRESHOLD moves with losing pressure (10 + 20 × pressure),
+  // not just the roughness: a faction being routed is collapsing at a
+  // stability where a faction at peace is merely in crisis.
+  it('with zero losing pressure, collapses only at stability ≤ 10', () => {
+    expect(decideFactionCollapse({ stability: 11, resources: 100, military: 100, warLosingPressure: 0 }).collapses).toBe(false)
+    expect(decideFactionCollapse({ stability: 10, resources: 100, military: 100, warLosingPressure: 0 }).collapses).toBe(true)
+  })
+
+  it('with full losing pressure, collapses at stability ≤ 30', () => {
+    expect(decideFactionCollapse({ stability: 30, resources: 100, military: 100, warLosingPressure: 1 }).collapses).toBe(true)
+    expect(decideFactionCollapse({ stability: 31, resources: 100, military: 100, warLosingPressure: 1 }).collapses).toBe(false)
+  })
+
+  it('with half losing pressure, collapses at stability ≤ 20', () => {
+    expect(decideFactionCollapse({ stability: 20, resources: 100, military: 100, warLosingPressure: 0.5 }).collapses).toBe(true)
+    expect(decideFactionCollapse({ stability: 21, resources: 100, military: 100, warLosingPressure: 0.5 }).collapses).toBe(false)
+  })
+
+  it('clamps losing pressure to 0-1 for the threshold move', () => {
+    // Pressure 2 is still a full route (threshold 30); negative pressure is
+    // still peace (threshold 10).
+    expect(decideFactionCollapse({ stability: 25, resources: 100, military: 100, warLosingPressure: 2 }).collapses).toBe(true)
+    expect(decideFactionCollapse({ stability: 25, resources: 100, military: 100, warLosingPressure: -1 }).collapses).toBe(false)
+  })
+
+  it('a pressure-triggered collapse above the base threshold is smooth on the stability axis (roughness clamps), but still messy from the war bump', () => {
+    const result = decideFactionCollapse({ stability: 25, resources: 100, military: 100, warLosingPressure: 1 })
+    expect(result.collapses).toBe(true)
+    // base roughness = clamp((10 − 25) / 10) = 0; the 0.25 war bump remains.
+    expect(result.roughness).toBeCloseTo(0.25, 5)
+  })
 })
 
 describe('decideFactionFounding', () => {
@@ -328,8 +360,14 @@ describe('decideDefection (NPC motivation model)', () => {
   })
 
   it('treats the threshold boundary as staying independent (>=)', () => {
-    const result = decideDefection([{ id: 'a', loyalty: 70 }])
+    const result = decideDefection([{ id: 'a', loyalty: 60 }])
     expect(result.independentIds).toEqual(['a'])
+  })
+
+  it('defects one point below the stay threshold', () => {
+    const result = decideDefection([{ id: 'a', loyalty: 59 }])
+    expect(result.defectingIds).toEqual(['a'])
+    expect(result.independentIds).toEqual([])
   })
 
   it('handles an empty roster', () => {
@@ -858,6 +896,43 @@ describe('decideAmbitionOutcome', () => {
         expect(outcome.targetResourceDelta).toBeLessThan(0)
       }
     }
+  })
+
+  // goalDriftedMidClock: the replacement for the removed ambition-clock
+  // goal hold — drift is allowed, but it costs the ambition -15 success
+  // chance at resolution. Fixture clock ids chosen so stableHash's roll
+  // lands in the band the 15-point shift straddles (rolls verified against
+  // the same stableHash the implementation uses).
+  it('goalDriftedMidClock: false behaves exactly like no drift flag', () => {
+    const noFlag = decideAmbitionOutcome({ ...input, clockId: 'drift-clock-14' })
+    const flagFalse = decideAmbitionOutcome({ ...input, clockId: 'drift-clock-14', goalDriftedMidClock: false })
+    expect(flagFalse).toEqual(noFlag)
+  })
+
+  it('goalDriftedMidClock: true flips a marginal success to a failure (−15 chance)', () => {
+    // Roll 79: chance 80 (resources 80, no drift) → success; chance 65
+    // (drifted) → failure. The roll is identical either way — only the
+    // flag moves.
+    const noDrift = decideAmbitionOutcome({ ...input, factionId: 'f1', clockId: 'drift-clock-14' })
+    const drifted = decideAmbitionOutcome({ ...input, factionId: 'f1', clockId: 'drift-clock-14', goalDriftedMidClock: true })
+    expect(noDrift.success).toBe(true)
+    expect(drifted.success).toBe(false)
+  })
+
+  it('the drift penalty never pushes success chance below the floor', () => {
+    // Roll 37: even a faction with nothing going for it (chance 40) can
+    // still succeed — the −15 penalty clamps at the 40 floor, not 25.
+    const outcome = decideAmbitionOutcome({ ...input, factionId: 'f1', clockId: 'floor-clock-0', resources: 0, goalDriftedMidClock: true })
+    expect(outcome.success).toBe(true)
+  })
+
+  it('the drift penalty never exceeds the ceiling on a strong faction', () => {
+    // Roll 83: chance 90 (resources 100, no drift) → success; chance 75
+    // (drifted) → failure. The penalty binds at the top end too.
+    const noDrift = decideAmbitionOutcome({ ...input, factionId: 'f1', clockId: 'ceil-clock-30', resources: 100 })
+    const drifted = decideAmbitionOutcome({ ...input, factionId: 'f1', clockId: 'ceil-clock-30', resources: 100, goalDriftedMidClock: true })
+    expect(noDrift.success).toBe(true)
+    expect(drifted.success).toBe(false)
   })
 
   it('never guarantees success even at a maxed-out relevant stat', () => {

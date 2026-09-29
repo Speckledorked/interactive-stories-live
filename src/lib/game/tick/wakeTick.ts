@@ -148,7 +148,12 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
       // the interim decay ticks stay silent, so the history reads
       // "they steadied" once, at the moment the grief actually lifts —
       // not a per-turn drip. origin: 'wake' matches the creation-side
-      // changes above, so consumers can pair shock with recovery.
+      // changes above, so consumers can pair shock with recovery; the
+      // recovery is tagged wakeSourceType: 'RESOLUTION' (not 'NPC' /
+      // 'FACTION') so it can never be misread as a fresh loss — the
+      // abandonment classification in npcDispositionTick.ts keys on those
+      // creation-side source types alone, and reads the positive
+      // RESOLUTION row as FACTION_STEADIED instead.
       if (step.resolved) {
         changes.push({
           entityType: 'FACTION',
@@ -162,6 +167,7 @@ export async function tickWake(ctx: TickContext): Promise<TickHandlerResult> {
           significant: false,
           importance: 'NORMAL',
           origin: 'wake',
+          wakeSourceType: 'RESOLUTION',
         })
       }
     }

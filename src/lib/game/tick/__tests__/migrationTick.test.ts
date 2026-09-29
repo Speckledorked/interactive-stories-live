@@ -13,7 +13,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
-import { decideMigration, tickMigration } from '../migrationTick'
+import { decideMigration, destinationScore, perceivedConditionScore, tickMigration } from '../migrationTick'
 import type { TickContext } from '../types'
 import { simTurn } from '@/lib/game/turnClock'
 
@@ -523,5 +523,218 @@ describe('tickMigration (DB handler)', () => {
 
     expect(result.changes).toHaveLength(0)
     expect(prisma.nPC.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('destinationScore — owner health and rival penalty folded into the sort', () => {
+  it('subtracts 15 points per LOW owner-health signal', () => {
+    const bothLow = { id: 'a', name: 'A', conditionScore: 80, population: null, ownerFactionResources: 10, ownerFactionStability: 10 }
+    const oneLow = { id: 'a', name: 'A', conditionScore: 80, population: null, ownerFactionResources: 10, ownerFactionStability: 90 }
+    const healthy = { id: 'a', name: 'A', conditionScore: 80, population: null }
+    expect(destinationScore(bothLow)).toBe(50)
+    expect(destinationScore(oneLow)).toBe(65)
+    expect(destinationScore(healthy)).toBe(80)
+  })
+
+  it('subtracts 10 when the destination is owned by the fleeing party\'s rival', () => {
+    const rivalOwned = { id: 'a', name: 'A', conditionScore: 80, population: null, ownerFactionId: 'rival-f' }
+    expect(destinationScore(rivalOwned, 'rival-f')).toBe(70)
+    expect(destinationScore(rivalOwned, 'other-f')).toBe(80)
+    expect(destinationScore(rivalOwned)).toBe(80)
+  })
+})
+
+describe('decideMigration — destinationScore sort (owner health folded in, rival graded)', () => {
+  const distressed = [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null }]
+  const npcs = [{ id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true }]
+
+  it('a distressed-owner haven loses to a healthier destination with a lower raw condition', () => {
+    const { npcMoves } = decideMigration(
+      distressed,
+      [
+        { id: 'a', name: 'A', conditionScore: 80, population: null, ownerFactionId: 'f1', ownerFactionResources: 10, ownerFactionStability: 10 },
+        { id: 'b', name: 'B', conditionScore: 60, population: null, ownerFactionId: 'f2', ownerFactionResources: 90, ownerFactionStability: 90 },
+      ],
+      npcs
+    )
+    // A scores 80 − 30 = 50; B scores 60 — owner health now moves the
+    // ranking itself, not just ties.
+    expect(npcMoves[0].toLocationId).toBe('b')
+  })
+
+  it('a rival-owned destination takes a −10 penalty but still wins when it is the only candidate (preference, not veto)', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null, ownerFactionId: 'f1' }],
+      [{ id: 'rival-town', name: 'Rival Town', conditionScore: 90, population: null, ownerFactionId: 'rival-f' }],
+      npcs,
+      [],
+      new Map(),
+      new Map([['f1', 'rival-f']])
+    )
+    expect(npcMoves[0].toLocationId).toBe('rival-town')
+  })
+
+  it('the −10 rival penalty lets a slightly worse non-rival destination win', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null, ownerFactionId: 'f1' }],
+      [
+        { id: 'rival-town', name: 'Rival Town', conditionScore: 85, population: null, ownerFactionId: 'rival-f' },
+        { id: 'free-town', name: 'Free Town', conditionScore: 80, population: null, ownerFactionId: 'f3' },
+      ],
+      npcs,
+      [],
+      new Map(),
+      new Map([['f1', 'rival-f']])
+    )
+    // Rival Town scores 85 − 10 = 75 < Free Town's 80.
+    expect(npcMoves[0].toLocationId).toBe('free-town')
+  })
+
+  it('the penalty is per fleeing party: an NPC whose OWN faction rivals the destination owner is steered elsewhere', () => {
+    const { npcMoves } = decideMigration(
+      [{ id: 'ruins', name: 'The Ruins', conditionScore: 10, population: null, ownerFactionId: 'f1' }],
+      [
+        { id: 'rival-town', name: 'Rival Town', conditionScore: 90, population: null, ownerFactionId: 'rival-f' },
+        { id: 'free-town', name: 'Free Town', conditionScore: 80, population: null, ownerFactionId: 'f3' },
+      ],
+      [
+        { id: 'npc1', name: 'Aldric', locationId: 'ruins', isAlive: true, factionId: 'f9' },
+        { id: 'npc2', name: 'Bryn', locationId: 'ruins', isAlive: true, factionId: 'f1' },
+      ],
+      [],
+      new Map(),
+      new Map([['f9', 'rival-f'], ['f1', 'other-f']])
+    )
+    // npc1's own faction rivals rival-f: Rival Town scores 80, ties Free
+    // Town's 80, and loses the id tie-break → free-town. npc2's faction
+    // does not rival rival-f: Rival Town scores the full 90 → rival-town.
+    expect(npcMoves).toHaveLength(2)
+    expect(npcMoves[0]).toMatchObject({ npcId: 'npc1', toLocationId: 'free-town' })
+    expect(npcMoves[1]).toMatchObject({ npcId: 'npc2', toLocationId: 'rival-town' })
+  })
+})
+
+describe('perceivedConditionScore — distorted rumors shift the perceived doom score', () => {
+  it('an undistorted row reports the true value', () => {
+    expect(perceivedConditionScore(30, false, null)).toBe(30)
+    expect(perceivedConditionScore(10, false, 'EXAGGERATED')).toBe(10)
+  })
+
+  it('EXAGGERATED shifts the perceived score −20 (worse than truth)', () => {
+    expect(perceivedConditionScore(30, true, 'EXAGGERATED')).toBe(10)
+  })
+
+  it('MINIMIZED shifts the perceived score +20 (better than truth)', () => {
+    expect(perceivedConditionScore(10, true, 'MINIMIZED')).toBe(30)
+  })
+
+  it('GARBLED_DETAIL and ATTRIBUTED_WRONG do not shift the score', () => {
+    expect(perceivedConditionScore(30, true, 'GARBLED_DETAIL')).toBe(30)
+    expect(perceivedConditionScore(30, true, 'ATTRIBUTED_WRONG')).toBe(30)
+    expect(perceivedConditionScore(30, true, null)).toBe(30)
+  })
+})
+
+describe('tickMigration — distorted doom hearsay and flight doom rumors (DB handler)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(prisma.locationAdjacency.findMany).mockResolvedValue([])
+  })
+
+  function doomRow(
+    npcId: string,
+    locationId: string,
+    newValue: string,
+    opts: { distorted?: boolean; distortionFlavor?: 'EXAGGERATED' | 'MINIMIZED' | 'GARBLED_DETAIL' | 'ATTRIBUTED_WRONG' | null; type?: string } = {}
+  ) {
+    return {
+      npcId,
+      distorted: opts.distorted ?? false,
+      distortionFlavor: opts.distortionFlavor ?? null,
+      worldEvent: { targetId: locationId, newValue, type: opts.type ?? 'location_condition.conditionScore' },
+    }
+  }
+
+  function fineTownSetup() {
+    vi.mocked(prisma.location.findMany).mockResolvedValueOnce([
+      { id: 'town', name: 'The Town', conditionScore: 60, population: null },
+      { id: 'haven', name: 'Haven', conditionScore: 90, population: null },
+    ] as any)
+    vi.mocked(prisma.nPC.findMany).mockResolvedValueOnce([
+      { id: 'npc1', name: 'Aldric', locationId: 'town', isAlive: true, importance: 3 },
+    ] as any)
+  }
+
+  it('reads distorted and distortionFlavor from the TOLD rows', async () => {
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([doomRow('npc1', 'town', '10')] as any)
+
+    await tickMigration(baseCtx())
+
+    expect(vi.mocked(prisma.eventWitness.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ distorted: true, distortionFlavor: true }),
+      })
+    )
+  })
+
+  it('an EXAGGERATED rumor of 30 reads as doomed (perceived 10) — the NPC flees a fine town', async () => {
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([
+      doomRow('npc1', 'town', '30', { distorted: true, distortionFlavor: 'EXAGGERATED' }),
+    ] as any)
+
+    const result = await tickMigration(baseCtx())
+
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { locationId: 'haven', currentLocation: 'Haven' },
+    })
+    expect(result.changes[0].reason).toMatch(/rumors of its coming ruin/)
+  })
+
+  it('a MINIMIZED rumor of 10 reads as safe (perceived 30) — the NPC stays', async () => {
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([
+      doomRow('npc1', 'town', '10', { distorted: true, distortionFlavor: 'MINIMIZED' }),
+    ] as any)
+
+    const result = await tickMigration(baseCtx())
+
+    expect(prisma.nPC.update).not.toHaveBeenCalled()
+    expect(result.changes).toEqual([])
+  })
+
+  it('an undistorted 30 is not doomed; an undistorted 10 is', async () => {
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([doomRow('npc1', 'town', '30')] as any)
+    const calm = await tickMigration(baseCtx())
+    expect(prisma.nPC.update).not.toHaveBeenCalled()
+    expect(calm.changes).toEqual([])
+
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([doomRow('npc1', 'town', '10')] as any)
+    await tickMigration(baseCtx())
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { locationId: 'haven', currentLocation: 'Haven' },
+    })
+  })
+
+  it('a TOLD populationFlight row marks the source location doomed with no score to parse', async () => {
+    fineTownSetup()
+    vi.mocked(prisma.eventWitness.findMany).mockResolvedValueOnce([
+      doomRow('npc1', 'town', 'Haven', { type: 'location_population.populationFlight' }),
+    ] as any)
+
+    const result = await tickMigration(baseCtx())
+
+    // The flight itself is the signal: the NPC flees even though the
+    // town's condition score (60) is nowhere near distressed.
+    expect(prisma.nPC.update).toHaveBeenCalledWith({
+      where: { id: 'npc1' },
+      data: { locationId: 'haven', currentLocation: 'Haven' },
+    })
+    expect(result.changes[0].reason).toMatch(/rumors of its coming ruin/)
   })
 })

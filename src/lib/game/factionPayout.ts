@@ -52,7 +52,7 @@ export const GOLD_PER_RESOURCE_POINT = 100
  * turn and cascade straight into war outcomes and ambition thresholds —
  * an AI text field should not be able to collapse an institution.
  */
-export const MAX_RESOURCE_COST_PER_PAYOUT = 15
+export const MAX_RESOURCE_COST_PER_PAYOUT = 30
 
 export interface PayoutAssessment {
   /** What the fiction promised. */
@@ -90,7 +90,7 @@ export function assessPayout(promised: number, resources: number): PayoutAssessm
   // never more than MAX_RESOURCE_COST_PER_PAYOUT's worth. #306: `paid`
   // used to be capped only by `capacity`, independent of the cap below on
   // what the faction actually loses — for any faction above
-  // BROKE_THRESHOLD (resources > 15) and any reward above 1,500 gold, the
+  // BROKE_THRESHOLD (resources > 30) and any reward above 3,000 gold, the
   // player received the reward in full while the faction's tracked
   // depletion reflected only a fraction of it. Deriving `paid` from the
   // same ceiling keeps both numbers consistent with the file's own "a

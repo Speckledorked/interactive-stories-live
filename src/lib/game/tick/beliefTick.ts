@@ -80,11 +80,11 @@ export interface BeliefDriftEvent {
 // range) rather than a swing large enough to flip a faction's disposition
 // from one or two events.
 const DRIFT_AMOUNT = 4
-// A mobilization (declaration or coalition joining) is a smaller,
-// distinct nudge from a won/lost war — fervor stirs, but the outcome
-// hasn't happened yet. Half the standard drift, deliberately not a full
-// event's weight.
-const MOBILIZATION_ZEALOTRY_NUDGE = 2
+// A mobilization (declaration or coalition joining) is a distinct nudge
+// from a won/lost war — fervor stirs, but the outcome hasn't happened
+// yet. A full event's weight now: the banners being raised moves fervor
+// as much as a battle's aftermath moves other beliefs.
+const MOBILIZATION_ZEALOTRY_NUDGE = 4
 
 /**
  * Pure — no DB access. Folds a batch of this faction's own recent events

@@ -23,13 +23,17 @@ const FIRST_RUN = `
   [-] Removed column \`createdAt\`
 `
 
-// What remains once those two are fixed: the four raw-SQL indexes only.
+// What remains once those two are fixed: the raw-SQL indexes only —
+// campaign_memories' four, and (since #499) lore_entries' one.
 const RESIDUAL = `
 [*] Changed the \`campaign_memories\` table
   [-] Removed index on columns (involvedCharacterIds)
   [-] Removed index on columns (embedding)
   [-] Removed index on columns (involvedFactionIds)
   [-] Removed index on columns (involvedNpcIds)
+
+[*] Changed the \`lore_entries\` table
+  [-] Removed index on columns (embedding)
 `
 
 describe('normalizing prisma migrate diff output', () => {
@@ -50,6 +54,30 @@ describe('normalizing prisma migrate diff output', () => {
     expect(a).toEqual(b)
   })
 
+  it('qualifies each sub-line with its table, so identical lines stay distinct', () => {
+    // #499 gave lore_entries an hnsw index on `embedding`, and
+    // campaign_memories already had one. Their diff lines are
+    // character-for-character identical, so a flat sorted set collapses them
+    // into one — and the snapshot would then pass with EITHER index dropped,
+    // because the other still produces the text.
+    const lines = normalizeDiff(`
+[*] Changed the \`campaign_memories\` table
+  [-] Removed index on columns (embedding)
+
+[*] Changed the \`lore_entries\` table
+  [-] Removed index on columns (embedding)
+`)
+    expect(lines).toContain('campaign_memories: [-] Removed index on columns (embedding)')
+    expect(lines).toContain('lore_entries: [-] Removed index on columns (embedding)')
+    expect(new Set(lines).size).toBe(lines.length)
+  })
+
+  it('keeps an unattributed sub-line rather than dropping it', () => {
+    // A line before any table header is still drift. Discarding it would be
+    // the same bug this qualification fixes, in the other direction.
+    expect(normalizeDiff('  [-] Removed column `orphan`')).toEqual(['[-] Removed column `orphan`'])
+  })
+
   it('recognises an empty diff', () => {
     expect(isEmptyDiff(normalizeDiff('No difference detected.'))).toBe(true)
     expect(isEmptyDiff(normalizeDiff(''))).toBe(true)
@@ -60,11 +88,18 @@ describe('normalizing prisma migrate diff output', () => {
 describe('comparing against the recorded residual', () => {
   const expected = parseExpected(readFileSync(join(process.cwd(), 'prisma', 'schema-drift-expected.txt'), 'utf-8'))
 
-  it('the real snapshot file parses to the four raw-SQL index lines plus its table header', () => {
+  it('the real snapshot file parses to the raw-SQL index lines plus their table headers', () => {
     // If the snapshot ever parsed to nothing, every comparison below would
     // pass vacuously and the check would be asserting nothing at all.
-    expect(expected.length).toBe(5)
-    expect(expected.filter((l) => l.includes('Removed index'))).toHaveLength(4)
+    //
+    // Two table headers (campaign_memories, lore_entries) and five index
+    // lines: four GIN/hnsw on the first, one hnsw on the second (#499).
+    expect(expected.length).toBe(7)
+    expect(expected.filter((l) => l.includes('Removed index'))).toHaveLength(5)
+    // Each one names its table, so dropping either embedding index is still
+    // caught.
+    expect(expected).toContain('campaign_memories: [-] Removed index on columns (embedding)')
+    expect(expected).toContain('lore_entries: [-] Removed index on columns (embedding)')
   })
 
   it('passes when the live diff is exactly the recorded residual', () => {
@@ -75,7 +110,14 @@ describe('comparing against the recorded residual', () => {
     const { unexpected, stale, ok } = compareDrift(normalizeDiff(FIRST_RUN), expected)
 
     expect(ok).toBe(false)
-    expect(stale).toEqual([])
+    // FIRST_RUN is verbatim history from PR #455, and lore_entries had no
+    // index then, so today's snapshot legitimately reports those two lines as
+    // stale against it. That is the check working, not a fixture to patch:
+    // what this case is about is the UNEXPECTED side.
+    expect(stale).toEqual([
+      'lore_entries: [-] Removed index on columns (embedding)',
+      '[*] Changed the `lore_entries` table',
+    ].sort())
     // The column absent from the model, and the truncated index name.
     expect(unexpected.some((l) => l.includes('Removed column `createdAt`'))).toBe(true)
     expect(unexpected.some((l) => l.includes('Renamed index'))).toBe(true)
@@ -86,7 +128,8 @@ describe('comparing against the recorded residual', () => {
     const withDrift = normalizeDiff(RESIDUAL + '\n  [-] Removed column `somethingNew`')
     const { unexpected, ok } = compareDrift(withDrift, expected)
     expect(ok).toBe(false)
-    expect(unexpected).toEqual(['[-] Removed column `somethingNew`'])
+    // Qualified by the table whose block it appeared under.
+    expect(unexpected).toEqual(['lore_entries: [-] Removed column `somethingNew`'])
   })
 
   it('FAILS on a stale expectation, so the exception list cannot rot', () => {
@@ -99,13 +142,34 @@ describe('comparing against the recorded residual', () => {
 
     expect(ok).toBe(false)
     expect(unexpected).toEqual([])
-    expect(stale).toHaveLength(3)
+    // The three GIN lines, plus lore_entries' header and its index line.
+    expect(stale).toHaveLength(5)
+  })
+
+  it('FAILS when one table keeps its embedding index and the other loses it', () => {
+    // The case a flat sorted set could not see at all: both tables produce
+    // the identical line "[-] Removed index on columns (embedding)", so
+    // before qualification, dropping campaign_memories' hnsw index left the
+    // snapshot green because lore_entries still emitted the text.
+    const onlyLore = normalizeDiff(`
+[*] Changed the \`campaign_memories\` table
+  [-] Removed index on columns (involvedCharacterIds)
+  [-] Removed index on columns (involvedFactionIds)
+  [-] Removed index on columns (involvedNpcIds)
+
+[*] Changed the \`lore_entries\` table
+  [-] Removed index on columns (embedding)
+`)
+    const { stale, ok } = compareDrift(onlyLore, expected)
+
+    expect(ok).toBe(false)
+    expect(stale).toEqual(['campaign_memories: [-] Removed index on columns (embedding)'])
   })
 
   it('FAILS when the diff goes completely empty while the snapshot expects lines', () => {
     const { stale, ok } = compareDrift(normalizeDiff('No difference detected.'), expected)
     expect(ok).toBe(false)
-    expect(stale).toHaveLength(5)
+    expect(stale).toHaveLength(7)
   })
 })
 

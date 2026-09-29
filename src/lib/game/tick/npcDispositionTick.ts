@@ -243,7 +243,7 @@ function classifyOwnEvent(row: { type: string; newValue: string | null }): Dispo
 }
 
 /** This NPC's affiliated faction's WorldEvent rows, classified — same shape as beliefTick.ts's classifyWorldEvent. */
-function classifyFactionEvent(row: {
+export function classifyFactionEvent(row: {
   type: string
   newValue: string | null
   previousValue?: string | null

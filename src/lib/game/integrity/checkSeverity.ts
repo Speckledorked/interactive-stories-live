@@ -36,6 +36,12 @@ export const CHECK_SEVERITY: Partial<Record<CheckKey, number>> = {
   // reassessment/war participation actually defer to?), so it gets the
   // same top severity tier, not a lesser one.
   'faction.leadership.atMostOneLivingLeader': 0,
+  // #476: the same tier, and in practice it must run BEFORE the two above
+  // to do them any good — a stale leaderCharacterId is precisely what
+  // makes both of them read "nothing to do". Severity ordering is stable
+  // within a tier by registration order, and this check is registered
+  // first in the leadership group for that reason.
+  'faction.leaderCharacterId.alive': 0,
 
   // The actual shape of the Phase 0 crash bug (a live war pointing at a
   // location that no longer exists) — now backstopped by a real FK

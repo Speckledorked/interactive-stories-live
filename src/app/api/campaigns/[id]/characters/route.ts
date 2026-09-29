@@ -6,7 +6,7 @@ import { validateStats } from '@/lib/game/advancement'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
-import { createCharacter, StartingLoadoutError, type CreateCharacterBody } from '@/lib/game/characterCreation'
+import { createCharacter, StartingLoadoutError, StartingLocationError, type CreateCharacterBody } from '@/lib/game/characterCreation'
 
 /** Request-size ceiling only — the real per-group bound is the world's own
  *  declared slot capacity, enforced in resolveStartingCapabilities. */
@@ -108,6 +108,11 @@ export async function POST(
     // fault: too many essences for this world's declared capacity, or a
     // capstone claimed without its foundation. The message says which.
     if (error instanceof StartingLoadoutError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    // #479: the starting location carries a corruption gate this character
+    // cannot pass. Player-fixable in a different field, so its own branch.
+    if (error instanceof StartingLocationError) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     console.error('Create character error:', error)

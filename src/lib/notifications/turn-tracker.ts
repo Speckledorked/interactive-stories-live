@@ -333,6 +333,33 @@ export class TurnTracker {
 
     for (const tracker of overdueTurns) {
       try {
+        // #481: claim BEFORE notifying, atomically.
+        //
+        // The latch used to be written after the per-admin loop finished,
+        // which made "idempotent" (this function's own word, at the top of
+        // this file) untrue in two ways. A throw anywhere inside the loop
+        // skipped the latch entirely, so the next run re-notified EVERY
+        // admin — including the ones who had already received it, since
+        // nothing records per-admin progress. And two overlapping cron
+        // invocations could both read `overdueNotifiedAt: null` and both
+        // notify, because a read followed by a later write is not a claim.
+        //
+        // updateMany scoped to the null the findMany selected on, with the
+        // affected-row count deciding who won — the same shape #304 uses
+        // for downtime completion and #474 for its retry path.
+        //
+        // This trades at-least-once for at-most-once. A crash between the
+        // claim and the notification means the reminder is never sent, and
+        // that is the right direction for this particular message: it is a
+        // HIGH-priority nag, the deadline is still visible in the UI, and a
+        // duplicate stack of "turn overdue" alerts is worse than a missing
+        // one.
+        const claim = await prisma.turnTracker.updateMany({
+          where: { id: tracker.id, overdueNotifiedAt: null },
+          data: { overdueNotifiedAt: new Date() }
+        });
+        if (claim.count === 0) continue;
+
         const turnOrder = tracker.turnOrder as unknown as TurnOrder[];
         const currentPlayer = turnOrder[tracker.currentTurn];
 
@@ -354,11 +381,6 @@ export class TurnTracker {
             triggerSound: 'turn-reminder'
           });
         }
-
-        await prisma.turnTracker.update({
-          where: { id: tracker.id },
-          data: { overdueNotifiedAt: new Date() }
-        });
 
         notified++;
       } catch (error) {

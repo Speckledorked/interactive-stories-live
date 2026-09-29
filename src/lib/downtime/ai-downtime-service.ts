@@ -594,6 +594,31 @@ Respond in an engaging, narrative style as MythOS. Keep it to 2-3 paragraphs.`
       where: { characterId, status: 'COMPLETED', outcomeGenerationFailedAt: { not: null } },
     })
     for (const activity of failedOutcomeActivities) {
+      // #474: the same defect class #304 fixed on the completion path,
+      // still open on this one. Two concurrent advances (double-click, two
+      // open tabs, a client retry) could both select this row and both run
+      // generateDynamicOutcomes, double-applying its gold, items and skill
+      // XP. A plain findMany followed by a for-loop is not a claim.
+      //
+      // Claimed exactly the way #304 claims the ACTIVE -> COMPLETED
+      // transition: an updateMany scoped to the state this call actually
+      // read, with the affected-row count deciding who won. Clearing the
+      // flag IS the claim — it is the same field the WHERE above selected
+      // on, so the loser's updateMany matches nothing and it skips.
+      //
+      // A crash between this claim and a successful generation leaves the
+      // row COMPLETED with no failure flag and no rewards, which is the
+      // direction to fail in: a lost retry is recoverable by hand, a
+      // double-applied reward is not detectable at all.
+      const claim = await prisma.downtimeActivity.updateMany({
+        where: { id: activity.id, outcomeGenerationFailedAt: { not: null } },
+        data: { outcomeGenerationFailedAt: null },
+      })
+      if (claim.count === 0) {
+        console.warn(`  ⚠️ downtime retry "${activity.summary}": claimed by a concurrent request — skipping duplicate reward application`)
+        continue
+      }
+
       const aiInterpretation = (activity.outcomes as any)?.aiInterpretation || {}
       const outcomes = await this.generateDynamicOutcomes(activity.id, activity.description, aiInterpretation)
       results.push({
@@ -882,9 +907,10 @@ Based on the player's original intent and what happened during the activity, gen
         data: {
           outcomes,
           finalOutcome: outcomes.narrative,
-          // A retry (see advanceDynamicDowntime's own retry pass) landing
-          // here means this attempt succeeded — clear any failure a prior
-          // attempt recorded.
+          // Belt and braces since #474: the retry pass now clears this as
+          // its claim before calling here, so on that path it is already
+          // null. Kept because this function is also reached directly from
+          // the completion path, where nothing else guarantees it.
           outcomeGenerationFailedAt: null,
         }
       })

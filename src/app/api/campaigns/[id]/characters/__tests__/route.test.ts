@@ -21,6 +21,9 @@ vi.mock('@/lib/game/characterCreation', () => ({
   // The real class, not a stub: the route's instanceof check must see the
   // same constructor identity the thrown error carries.
   StartingLoadoutError: class StartingLoadoutError extends Error {},
+  // #479: the starting location carries a corruption gate this character
+  // cannot pass. Same instanceof requirement as the loadout error above.
+  StartingLocationError: class StartingLocationError extends Error {},
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: { character: { findMany: vi.fn() } },
@@ -186,6 +189,20 @@ describe('POST — starting loadout refusals', () => {
     const body = await response.json()
     expect(response.status).toBe(400)
     expect(body.error).toContain('this world allows 4')
+  })
+
+  it('maps a StartingLocationError to a 400 with the message intact (#479)', async () => {
+    // A starting location carrying a corruption gate this character cannot
+    // pass is the player's to fix too — in a different field, which is why
+    // it is a different class.
+    const { StartingLocationError } = await import('@/lib/game/characterCreation')
+    ;(createCharacter as any).mockRejectedValue(
+      new (StartingLocationError as any)('The Sunken Shrine cannot be your starting location — it does not open to anyone untouched by the Rot.')
+    )
+    const response = await POST(postRequest({ name: 'Jason' }), { params: { id: 'camp1' } })
+    const body = await response.json()
+    expect(response.status).toBe(400)
+    expect(body.error).toContain('The Sunken Shrine')
   })
 
   it('still maps unexpected failures to a 500', async () => {

@@ -48,7 +48,7 @@ describe('repairCharacterRelationships — recovery, not just cleanup', () => {
     const snapshot = emptySnapshot({
       npcs: [{ id: 'npc1', name: 'Lord Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       characters: [{
-        id: 'char1', name: 'Jason',
+        id: 'char1', name: 'Jason', isAlive: true,
         relationships: { npc1: { trust: 10 }, 'npc_123': { trust: 5, tension: 0, respect: 0, fear: 0 } },
         resources: null,
       }],
@@ -64,7 +64,7 @@ describe('repairCharacterRelationships — recovery, not just cleanup', () => {
     const snapshot = emptySnapshot({
       npcs: [{ id: 'npc1', name: 'Lord Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       characters: [{
-        id: 'char1', name: 'Jason',
+        id: 'char1', name: 'Jason', isAlive: true,
         relationships: { 'Lord Kessler': { trust: 10, tension: 0, respect: 0, fear: 0 } },
         resources: null,
       }],
@@ -82,7 +82,7 @@ describe('repairCharacterRelationships — recovery, not just cleanup', () => {
   it('returns null when there is nothing to repair', () => {
     const snapshot = emptySnapshot({
       npcs: [{ id: 'npc1', name: 'Lord Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
-      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: null }],
+      characters: [{ id: 'char1', name: 'Jason', isAlive: true, relationships: null, resources: null }],
     })
     const repair = repairCharacterRelationships(violation({ entityType: 'CHARACTER', entityId: 'char1' }), snapshot)
     expect(repair).toBeNull()
@@ -101,7 +101,7 @@ describe('repairCharacterReputation', () => {
     const snapshot = emptySnapshot({
       factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
       characters: [{
-        id: 'char1', name: 'Jason', relationships: null,
+        id: 'char1', name: 'Jason', isAlive: true, relationships: null,
         resources: { gold: 50, reputation: { f1: 10, 'f-gone': -5 } },
       }],
     })

@@ -11,6 +11,8 @@ import {
   repairFactionLeadership,
   factionHasAtMostOneLivingLeader,
   repairFactionLeadershipConflict,
+  factionLeaderCharacterIsAlive,
+  repairFactionLeaderCharacterAlive,
 } from './checks/factionLeadership'
 import { DUPLICATE_NAME_CHECKS } from './checks/duplicateNames'
 import { factionRelationshipsAreSymmetric } from './checks/factionRelationshipSymmetry'
@@ -18,6 +20,10 @@ import { IntegrityCheck, RepairFn } from './types'
 
 export const INTEGRITY_CHECKS: IntegrityCheck[] = [
   ...REFERENTIAL_INTEGRITY_CHECKS,
+  // #476: before the two below, deliberately. A stale leaderCharacterId is
+  // exactly what makes both of them read "nothing to do", so clearing it
+  // has to get first crack at the pass's repair budget.
+  factionLeaderCharacterIsAlive,
   factionHasOneLivingLeader,
   factionHasAtMostOneLivingLeader,
   ...DUPLICATE_NAME_CHECKS,
@@ -32,6 +38,7 @@ export const INTEGRITY_CHECKS: IntegrityCheck[] = [
  * for reporting. */
 export const INTEGRITY_REPAIRS: Record<string, RepairFn> = {
   ...REFERENTIAL_INTEGRITY_REPAIRS,
+  'faction.leaderCharacterId.alive': repairFactionLeaderCharacterAlive,
   'faction.leadership.exactlyOneLivingLeader': repairFactionLeadership,
   'faction.leadership.atMostOneLivingLeader': repairFactionLeadershipConflict,
 }

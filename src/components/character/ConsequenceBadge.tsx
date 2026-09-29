@@ -6,9 +6,10 @@
 import { IconButton } from '@/components/ui/icon-button'
 import { X } from 'lucide-react'
 import { CONSEQUENCE_ICONS } from '@/lib/ui/icons'
+import { CONSEQUENCE_LABELS, type ConsequenceType } from '@/lib/game/consequenceLabels'
 
 interface ConsequenceBadgeProps {
-  type: 'promise' | 'debt' | 'enemy' | 'longTermThreat'
+  type: ConsequenceType
   description: string
   onRemove?: () => void
 }
@@ -18,7 +19,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
     switch (type) {
       case 'promise':
         return {
-          label: 'Promise',
+          ...CONSEQUENCE_LABELS.promise,
           bgColor: 'bg-myth-good/10',
           borderColor: 'border-myth-good/30',
           textColor: 'text-myth-ink',
@@ -32,20 +33,20 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         // character-creation form's own "Debts Owed" flavor-text field.
         // Neither source is linked to Debt.status, so an entry here can
         // never be marked resolved and may already have been settled (or
-        // never existed as a real Debt) — labeled "Noted Debt" and annotated so it
-        // doesn't read as the tracked economy shown in
-        // the Obligations section above.
+        // never existed as a real Debt) — labelled and annotated so it
+        // doesn't read as the tracked economy shown in the Obligations
+        // section above. #475 moved that copy to lib/game/consequenceLabels.ts
+        // once a second renderer turned out to have its own heading.
         return {
-          label: 'Noted Debt',
+          ...CONSEQUENCE_LABELS.debt,
           bgColor: 'bg-myth-warn/10',
           borderColor: 'border-myth-warn/30',
           textColor: 'text-myth-ink',
           iconColor: 'text-myth-warn',
-          note: 'Informal note — not linked to the tracked Debt economy above.',
         }
       case 'enemy':
         return {
-          label: 'Enemy',
+          ...CONSEQUENCE_LABELS.enemy,
           bgColor: 'bg-myth-danger/10',
           borderColor: 'border-myth-danger/30',
           textColor: 'text-myth-danger',
@@ -53,7 +54,7 @@ export default function ConsequenceBadge({ type, description, onRemove }: Conseq
         }
       case 'longTermThreat':
         return {
-          label: 'Threat',
+          ...CONSEQUENCE_LABELS.longTermThreat,
           bgColor: 'bg-myth-danger/10',
           borderColor: 'border-myth-danger/20',
           textColor: 'text-myth-danger',

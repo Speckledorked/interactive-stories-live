@@ -137,6 +137,9 @@ export interface SnapshotTie {
 export interface SnapshotCharacter {
   id: string
   name: string
+  /** #476: a dead PC who still holds Faction.leaderCharacterId suppresses
+   * succession permanently, so the leadership checks need to know. */
+  isAlive: boolean
   relationships: unknown
   resources: unknown
 }

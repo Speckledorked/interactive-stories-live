@@ -16,6 +16,8 @@ import { resolveOrCreateLocationId } from '@/lib/game/worldUpdaters/locations'
 import { ensureContactNpcStubs } from '@/lib/wiki/contactNpcStubs'
 import { parseAdvancementTrack, resolveTierKey, startingTierKey, type AdvancementTrack } from './advancementTrack'
 import { UNLOCK_STARTING_PROFICIENCY } from '@/lib/game/capabilities'
+import { checkCorruptionGate, describeRefusal, hasCorruptionGate } from './corruptionGates'
+import { hasCorruptionTheme, parseCorruptionTheme } from './corruption'
 
 export interface CreateCharacterBody {
   name: string
@@ -90,6 +92,81 @@ export interface CreateCharacterBody {
  * capstone without its foundation), not server errors.
  */
 export class StartingLoadoutError extends Error {}
+
+/**
+ * The chosen starting location refuses this character (#479).
+ *
+ * Its own class rather than reusing StartingLoadoutError because the two
+ * are fixed in different places in the form — one is the capability
+ * picker, the other is the location field — and a route that maps them to
+ * the same 400 today may well want to point at different fields tomorrow.
+ */
+export class StartingLocationError extends Error {}
+
+/**
+ * Corruption gates apply at a BOUNDARY, never retroactively — see
+ * corruptionGates.ts, whose header states the rule and lists entry,
+ * acquisition and leverage as the three boundaries.
+ *
+ * Creation is a boundary, and it was the one nobody checked (#479).
+ * `createCharacter` placed the character at `body.currentLocation` through
+ * resolveOrCreateLocationId with no gate check anywhere in the path, so a
+ * location carrying `minCorruption` — the shrine that only opens to the
+ * marked, the exact worked example in that header — could be walked into
+ * by simply starting there. Movement was gated; arrival was not.
+ *
+ * A new character has corruption 0, so in practice this enforces
+ * `minCorruption` only. That is not a reason to check just that one: the
+ * gate's meaning belongs to checkCorruptionGate, and re-deriving "which
+ * half can fire here" at the call site is how two definitions start.
+ *
+ * Fails OPEN on every uncertainty, matching checkLocationEntryGate: no such
+ * location yet, no corruption theme, a lookup error. A gate that wrongly
+ * refuses blocks someone from making a character at all; one that wrongly
+ * permits costs a moment of flavour.
+ *
+ * Condition gates (#206) are deliberately NOT applied here. A collapsed
+ * bridge refuses a traveller, but refusing to let someone begin the game
+ * because their chosen home has decayed is a different and much harsher
+ * thing, and it is not what #479 asks for.
+ */
+async function checkStartingLocationGate(
+  campaignId: string,
+  locationName: string | null | undefined
+): Promise<void> {
+  if (!locationName) return
+
+  try {
+    const [location, campaign] = await Promise.all([
+      prisma.location.findUnique({
+        where: { campaignId_name: { campaignId, name: locationName } },
+        select: { minCorruption: true, maxCorruption: true },
+      }),
+      prisma.campaign.findUnique({
+        where: { id: campaignId },
+        select: { corruptionTheme: true },
+      }),
+    ])
+
+    // A location the player is naming into existence carries no gate.
+    if (!location || !hasCorruptionGate(location)) return
+    if (!hasCorruptionTheme(campaign?.corruptionTheme)) return
+
+    // Corruption 0: a character being created has done nothing yet.
+    const gate = checkCorruptionGate(location, 0, true)
+    if (gate.allowed) return
+
+    const theme = parseCorruptionTheme(campaign?.corruptionTheme)
+    throw new StartingLocationError(
+      `${locationName} cannot be your starting location — ${describeRefusal(gate.refusal!, theme!.name)}.`
+    )
+  } catch (error) {
+    // The refusal is the point; anything else is an uncertainty, and
+    // uncertainty fails open.
+    if (error instanceof StartingLocationError) throw error
+    console.error('Starting-location gate check failed (allowing):', error)
+  }
+}
 
 /**
  * Validate a player-declared starting loadout against the campaign.
@@ -178,6 +255,11 @@ export async function createCharacter(campaignId: string, userId: string, body: 
     body.originFamiliarity && ['NATIVE', 'NEWCOMER', 'OUTSIDER'].includes(body.originFamiliarity)
       ? body.originFamiliarity
       : 'NATIVE'
+
+  // #479: gate the starting location BEFORE resolveOrCreateLocationId,
+  // which creates the row when it is missing — running the check after it
+  // would mean a refused creation had already written a Location.
+  await checkStartingLocationGate(campaignId, body.currentLocation)
 
   // Resolve/create the matching Location row and link it via locationId
   // alongside the free-text field (see #425 — Location

@@ -21,6 +21,8 @@ import { normalizeConsequenceList, retireAt, activeTexts } from '../../consequen
 
 const makeTx = () => ({
   character: { update: vi.fn(async (_args: any) => ({})) },
+  // #476: a dead PC has to stop being a faction's leader of record.
+  faction: { updateMany: vi.fn(async (_args: any) => ({ count: 0 })) },
   // Corruption (#83) and condition (#206) entry gates look the destination
   // up by campaign+name; conditionScore/isContested are optional in the
   // mock type since most tests never set them (undefined derives to the
@@ -1450,5 +1452,49 @@ describe('applyCharacterChanges — stock condition effects', () => {
     const invented = data.conditions.conditions.find((c: any) => c.name === 'Moonstruck')
     expect(invented.rollModifier).toBe(-1)
     expect(invented.harmPerScene).toBeUndefined()
+  })
+})
+
+describe('applyCharacterChanges — a dead PC releases faction leadership (#476)', () => {
+  // Faction.leaderCharacterId is the "a player leads this" marker, and
+  // every succession path reads a set value as "there is a leader, nothing
+  // to do" — decideSuccession returns null on it, detectLeadershipConflict
+  // counts it as living. Nothing cleared it on death, so a faction whose PC
+  // leader died could never get a successor, and was invisible to the two
+  // checks built to catch exactly that. The deletion path was always safe
+  // (onDelete: SetNull); death was the hole.
+
+  it('releases leadership in the same transaction as the death', async () => {
+    const roster = [character({ harm: 6 })]
+
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'One last shove', effect: 'The door held' } } } as PcChange,
+    ], roster, npcRoster, noTheme, noTrack, true)
+
+    expect(tx.faction.updateMany).toHaveBeenCalledWith({
+      where: { campaignId: 'camp1', leaderCharacterId: 'char1' },
+      data: { leaderCharacterId: null },
+    })
+  })
+
+  it('does not touch factions when the character survives the update', async () => {
+    const roster = [character()]
+
+    await applyCharacterChanges(tx as any, 'camp1', 1, [
+      { character_name_or_id: 'char1', changes: { location: 'The Docks' } } as PcChange,
+    ], roster, npcRoster, noTheme, noTrack, true)
+
+    expect(tx.character.update).toHaveBeenCalled()
+    expect(tx.faction.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('is scoped to the campaign, so a same-id row elsewhere is untouched', async () => {
+    const roster = [character({ harm: 6 })]
+
+    await applyCharacterChanges(tx as any, 'camp2', 1, [
+      { character_name_or_id: 'char1', changes: { heroic_sacrifice: { circumstances: 'x', effect: 'y' } } } as PcChange,
+    ], roster, npcRoster, noTheme, noTrack, true)
+
+    expect(tx.faction.updateMany.mock.calls[0][0].where.campaignId).toBe('camp2')
   })
 })

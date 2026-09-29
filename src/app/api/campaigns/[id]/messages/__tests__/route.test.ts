@@ -149,8 +149,8 @@ describe('POST', () => {
 
     await POST(postRequest({ content: 'psst', type: 'WHISPER', targetUserId: 'other1' }), { params: { id: 'camp1' } })
 
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'new-message', expect.anything())
-    expect(trigger).toHaveBeenCalledWith('user-other1', 'new-whisper', expect.anything())
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'new-message', expect.anything())
+    expect(trigger).toHaveBeenCalledWith('private-user-other1', 'new-whisper', expect.anything())
   })
 
   it('still succeeds when the Pusher broadcast fails', async () => {

@@ -6,6 +6,7 @@ import { UserRole } from '@prisma/client';
 import { TurnTracker } from '@/lib/notifications/turn-tracker';
 import { PusherServer } from '@/lib/realtime/pusher-server';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 // GET /api/campaigns/[id]/turns - Get current turn info
 export async function GET(
@@ -108,7 +109,7 @@ export async function POST(
     try {
       const freshTurnInfo = await TurnTracker.getCurrentTurn(params.id, sceneId);
       const pusher = PusherServer()
-      if (pusher) await pusher.trigger(`campaign-${params.id}`, 'turn-update', freshTurnInfo);
+      if (pusher) await pusher.trigger(campaignChannel(params.id), 'turn-update', freshTurnInfo);
     } catch (pusherError) {
       console.error('Failed to broadcast turn update (non-critical):', pusherError);
     }
@@ -168,7 +169,7 @@ export async function DELETE(
     // nothing to show anymore — see the POST handler's broadcast above.
     try {
       const pusher = PusherServer()
-      if (pusher) await pusher.trigger(`campaign-${params.id}`, 'turn-update', null);
+      if (pusher) await pusher.trigger(campaignChannel(params.id), 'turn-update', null);
     } catch (pusherError) {
       console.error('Failed to broadcast turn end (non-critical):', pusherError);
     }

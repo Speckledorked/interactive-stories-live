@@ -66,7 +66,7 @@ describe('PATCH', () => {
     const response = await PATCH(patchRequest({ name: 'Doom Clock' }), { params: { id: 'camp1', clockId: 'clock1' } })
 
     expect(response.status).toBe(200)
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'clock:updated', expect.objectContaining({ clockId: 'clock1' }))
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'clock:updated', expect.objectContaining({ clockId: 'clock1' }))
   })
 
   it('does not broadcast an update for a hidden clock', async () => {

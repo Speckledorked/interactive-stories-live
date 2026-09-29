@@ -84,7 +84,7 @@ export default function NotesPanel({
     channel.bind('note-update', onNoteUpdate);
     return () => {
       // Unbind only. The channel itself is left subscribed because
-      // ChatPanel shares `campaign-${id}` — unsubscribing here would
+      // ChatPanel shares the same campaign channel — unsubscribing here would
       // silently kill live chat for the whole campaign.
       channel.unbind('note-update', onNoteUpdate);
     };

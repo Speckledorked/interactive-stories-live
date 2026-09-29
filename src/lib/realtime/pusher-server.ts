@@ -2,6 +2,7 @@
 
 import Pusher from 'pusher';
 import { RealtimeMessage, RealtimeNoteUpdate } from './pusher-client';
+import { campaignChannel, userChannel } from './channels';
 
 let pusherServer: Pusher | null = null;
 
@@ -47,14 +48,14 @@ export async function triggerNewMessage(message: RealtimeMessage) {
 
   // Send to campaign channel (for public messages)
   if (!message.targetUserId) {
-    await pusher.trigger(`campaign-${message.campaignId}`, 'new-message', message);
+    await pusher.trigger(campaignChannel(message.campaignId), 'new-message', message);
   }
 
   // Send to whisper recipient (for private messages)
   if (message.type === 'WHISPER' && message.targetUserId) {
-    await pusher.trigger(`user-${message.targetUserId}`, 'new-whisper', message);
+    await pusher.trigger(userChannel(message.targetUserId), 'new-whisper', message);
     // Also send to sender so they see their own whisper
-    await pusher.trigger(`user-${message.authorId}`, 'new-whisper', message);
+    await pusher.trigger(userChannel(message.authorId), 'new-whisper', message);
   }
 }
 
@@ -71,7 +72,7 @@ export async function triggerNoteUpdate(noteUpdate: RealtimeNoteUpdate) {
 
   // Only trigger for shared notes or GM notes
   if (noteUpdate.visibility === 'SHARED' || noteUpdate.visibility === 'GM') {
-    await pusher.trigger(`campaign-${noteUpdate.campaignId}`, 'note-update', noteUpdate);
+    await pusher.trigger(campaignChannel(noteUpdate.campaignId), 'note-update', noteUpdate);
   }
 }
 
@@ -93,7 +94,7 @@ export async function triggerUserTyping(campaignId: string, userId: string, user
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
 
-  await pusher.trigger(`campaign-${campaignId}`, 'user-typing', {
+  await pusher.trigger(campaignChannel(campaignId), 'user-typing', {
     userId,
     userName,
     isTyping,
@@ -114,7 +115,7 @@ export async function triggerNotificationUpdate(userId: string, notification: an
   const pusher = getPusherServer();
   if (!pusher) return; // Pusher not configured
 
-  await pusher.trigger(`user-${userId}`, 'notification-received', {
+  await pusher.trigger(userChannel(userId), 'notification-received', {
     ...notification,
     timestamp: new Date().toISOString()
   });

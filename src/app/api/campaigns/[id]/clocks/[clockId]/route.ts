@@ -5,6 +5,7 @@ import { getUser } from '@/lib/auth'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { validateClockTicks } from '@/lib/game/clockInvariant'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export async function PATCH(
   request: NextRequest,
@@ -71,7 +72,7 @@ export async function PATCH(
         const pusher = PusherServer()
         if (pusher) {
           await pusher.trigger(
-            `campaign-${campaignId}`,
+            campaignChannel(campaignId),
             'clock:updated',
             {
               clockId: clock.id,
@@ -149,7 +150,7 @@ export async function POST(
         const pusher = PusherServer()
         if (pusher) {
           await pusher.trigger(
-            `campaign-${campaignId}`,
+            campaignChannel(campaignId),
             'clock:ticked',
             {
               clockId: clock.id,

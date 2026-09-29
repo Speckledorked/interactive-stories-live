@@ -11,6 +11,7 @@ import PusherServer from '@/lib/realtime/pusher-server'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { handleRouteErrorWithDetails } from '@/lib/api/errors'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 // 60s = Vercel Hobby-tier ceiling, safe on every plan. See scene/route.ts for
 // the full rationale — this route awaits the same resolveScene() call.
@@ -146,7 +147,7 @@ export async function POST(
     // 4. Broadcast scene end event
     const pusher = PusherServer()
     if (pusher) {
-      await pusher.trigger(`campaign-${campaignId}`, 'scene:ended', {
+      await pusher.trigger(campaignChannel(campaignId), 'scene:ended', {
         sceneId,
         sceneNumber: scene.sceneNumber
       })

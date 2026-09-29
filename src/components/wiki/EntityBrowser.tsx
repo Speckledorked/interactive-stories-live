@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ENTITY_ICONS, ENTITY_FALLBACK_ICON, type IconComponent } from '@/lib/ui/icons'
 import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 type WikiEntryType = 'NPC' | 'FACTION' | 'LOCATION' | 'CLOCK' | 'ITEM' | 'QUEST' | 'LORE' | 'CUSTOM'
 // RUMORS isn't a WikiEntryType — it's a separate feed (offscreen
@@ -127,7 +128,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
   useEffect(() => {
     if (!pusherClient) return
 
-    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+    const channel = pusherClient.subscribe(campaignChannel(campaignId))
 
     channel.bind('scene:resolved', () => {
       loadEntries()
@@ -135,7 +136,7 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
 
     return () => {
       if (pusherClient) {
-        pusherClient.unsubscribe(`campaign-${campaignId}`)
+        pusherClient.unsubscribe(campaignChannel(campaignId))
       }
     }
   }, [campaignId, selectedType])

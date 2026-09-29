@@ -20,6 +20,7 @@ import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
 import { classifyStaleJob as classifyStaleJobCore, runStaleJobRecovery } from '@/lib/jobs/staleJobRecovery'
 import PusherServer from '@/lib/realtime/pusher-server'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export const MAX_ATTEMPTS = 3
 // One AI analysis call plus several sequential zone/token DB writes — no
@@ -145,7 +146,7 @@ export async function processMapGenJob(jobId: string): Promise<ProcessResult> {
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${job.campaignId}`, 'map:ready', { sceneId: job.sceneId, mapId: visual.mapId })
+        await pusher.trigger(campaignChannel(job.campaignId), 'map:ready', { sceneId: job.sceneId, mapId: visual.mapId })
       }
     } catch (pusherError) {
       console.error('Failed to broadcast map:ready:', pusherError)

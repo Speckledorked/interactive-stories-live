@@ -133,7 +133,7 @@ describe('POST', () => {
 
     await POST(req(validBody), { params: { id: 'camp1' } })
 
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'gm:clarification', expect.objectContaining({ id: 'clar1' }))
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'gm:clarification', expect.objectContaining({ id: 'clar1' }))
   })
 
   it('still succeeds when the Pusher broadcast fails (non-critical)', async () => {

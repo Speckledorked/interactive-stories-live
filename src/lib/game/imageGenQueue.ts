@@ -19,6 +19,7 @@ import { alertStuckJobs } from '@/lib/jobs/stuckJobAlert'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
 import { classifyStaleJob as classifyStaleJobCore, runStaleJobRecovery } from '@/lib/jobs/staleJobRecovery'
 import PusherServer from '@/lib/realtime/pusher-server'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export const MAX_ATTEMPTS = 3
 // Image generation is one API call + one upload — far shorter than the
@@ -141,7 +142,7 @@ export async function processImageGenJob(jobId: string): Promise<ProcessResult> 
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${job.campaignId}`, 'scene:image-ready', { sceneId: job.sceneId, imageUrl })
+        await pusher.trigger(campaignChannel(job.campaignId), 'scene:image-ready', { sceneId: job.sceneId, imageUrl })
       }
     } catch (pusherError) {
       console.error('Failed to broadcast scene:image-ready:', pusherError)

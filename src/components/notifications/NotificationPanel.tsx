@@ -12,6 +12,7 @@ import { NOTIFICATION_ICONS, NOTIFICATION_FALLBACK_ICON } from '@/lib/ui/icons';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Inbox } from 'lucide-react'
+import { userChannel } from '@/lib/realtime/channels'
 
 interface Notification {
   id: string;
@@ -96,7 +97,7 @@ export default function NotificationPanel({
       return;
     }
 
-    const channel = pusher.subscribe(`user-${userId}`);
+    const channel = pusher.subscribe(userChannel(userId));
 
     channel.bind('notification-received', (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
@@ -142,7 +143,7 @@ export default function NotificationPanel({
   const cleanup = () => {
     const pusher = getPusherClient();
     if (!pusher) return;
-    pusher.unsubscribe(`user-${userId}`);
+    pusher.unsubscribe(userChannel(userId));
   };
 
   const markAsRead = async (notificationId: string) => {

@@ -3,7 +3,7 @@
 // The header's bell needs an unread count, and no new plumbing is needed
 // to get one: NotificationPanel already fetches /api/notifications and
 // already binds the `notification-count-update` Pusher event on the
-// `user-${userId}` channel. The count just lived inside the panel, so it
+// userChannel(userId) channel. The count just lived inside the panel, so it
 // only existed while the panel was open — which is exactly when a badge
 // is least useful.
 //
@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react'
 import { getPusherClient } from '@/lib/realtime/pusher-client'
 import { authenticatedFetch, isAuthenticated, getUser } from '@/lib/clientAuth'
+import { userChannel } from '@/lib/realtime/channels'
 
 export function useUnreadCount(): number {
   const [count, setCount] = useState(0)
@@ -49,7 +50,7 @@ export function useUnreadCount(): number {
       }
     }
 
-    const channelName = `user-${user.id}`
+    const channelName = userChannel(user.id)
     const channel = pusher.subscribe(channelName)
 
     const onCount = (counts: { unread?: number }) => {

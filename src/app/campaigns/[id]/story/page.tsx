@@ -46,6 +46,7 @@ import { Timeline, TimelineItem } from '@/components/ui/timeline'
 import { UI_ICONS } from '@/lib/ui/icons'
 import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
 import { TOUCH_HEIGHT } from '@/components/ui/styles'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 // Whether `characterId` may act in `scene` — participants is null for a
 // genuinely open scene (anyone can act; membership grows dynamically as
@@ -404,7 +405,7 @@ export default function StoryPage() {
     }
 
     // Subscribe to the campaign channel
-    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+    const channel = pusherClient.subscribe(campaignChannel(campaignId))
 
     // Listen for new actions
     channel.bind('action:created', (data: any) => {
@@ -558,7 +559,7 @@ export default function StoryPage() {
     // Cleanup on unmount
     return () => {
       if (pusherClient) {
-        pusherClient.unsubscribe(`campaign-${campaignId}`)
+        pusherClient.unsubscribe(campaignChannel(campaignId))
       }
     }
   }, [campaignId])

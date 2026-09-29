@@ -152,7 +152,7 @@ describe('POST', () => {
 
     await POST(postRequest({ action: 'advance', sceneId: 'scene1' }), { params: { id: 'camp1' } })
 
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'turn-update', { currentPlayerId: 'p2' })
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'turn-update', { currentPlayerId: 'p2' })
   })
 
   it('still succeeds when the Pusher broadcast fails (non-critical)', async () => {
@@ -217,6 +217,6 @@ describe('DELETE', () => {
 
     await DELETE(deleteRequest('scene1'), { params: { id: 'camp1' } })
 
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'turn-update', null)
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'turn-update', null)
   })
 })

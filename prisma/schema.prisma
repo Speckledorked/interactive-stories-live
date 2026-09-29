@@ -4,7 +4,21 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // #500: the POOLED connection. Every concurrent serverless invocation
+  // opens its own, so without a pooler in front a traffic burst exhausts
+  // max_connections while most of those connections sit idle.
   url      = env("DATABASE_URL")
+  // The same database, unpooled. Migrations and introspection use
+  // session-level features (advisory locks, prepared statements) that a
+  // transaction pooler does not preserve, so they need a direct route.
+  //
+  // DATABASE_URL_UNPOOLED rather than a new DIRECT_URL: the Neon-Vercel
+  // integration already creates and maintains this variable, so reusing it
+  // means there is nothing to set and — more importantly — nothing to drift.
+  // A hand-copied DIRECT_URL would silently go stale the first time Neon
+  // rotated the password, and would do it on the migration path, which is
+  // the worst place to discover a stale credential.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 //

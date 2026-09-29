@@ -16,6 +16,35 @@
 // AI only picks the verdict" discipline used throughout this engine
 // (worldRules.ts, the Integrity Engine's repairs, ambitionResolution.ts
 // itself).
+//
+// #510 — WHY THIS LIVES IN tick/ WITHOUT BEING A TICK HANDLER.
+//
+// It is not in TICK_HANDLERS and never will be. Its only caller is
+// worldTurn.ts, which runs it AFTER runWorldTick's transaction has
+// committed, for the same reason ambitionResolution's AI-calling half
+// cannot sit inside one: this path makes a real completion call, and an
+// open database transaction must not be held across a network round trip
+// to a model provider.
+//
+// TICK_HANDLERS is deliberately zero-AI — that is the property the world
+// simulation's determinism rests on — so the directory reads, correctly,
+// as "the deterministic tick". A file here that calls out to a model is
+// therefore a genuine trip hazard for anyone auditing that property, even
+// though nothing is actually violated: an auditor grepping tick/ for
+// provider calls finds this and has to work out from the call graph that
+// it is outside the handler list.
+//
+// Kept here rather than moved, because "the mechanical consequences of a
+// clock completing" belongs beside the rest of the clock machinery and
+// moving it would split one subject across two directories to satisfy a
+// naming convention. The trip hazard is answered by saying so here, which
+// is where anyone following the thread arrives.
+//
+// The property itself is already enforced, and enforced better than a
+// directory rule could: zeroAiBoundary.test.ts (#419) walks the transitive
+// import closure of the REGISTERED handlers, which is the actual claim —
+// membership in TICK_HANDLERS, not location on disk. This file is outside
+// that closure and stays outside it.
 
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'

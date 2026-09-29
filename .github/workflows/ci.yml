@@ -187,6 +187,14 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/schemacheck
+      # #500: schema.prisma declares `directUrl = env("DATABASE_URL_UNPOOLED")`,
+      # and Prisma resolves EVERY datasource env var before it will run a
+      # migration — so `prisma migrate deploy` below fails at config time,
+      # not connection time, if this is unset. The CI service Postgres is a
+      # plain container with no pooler in front of it, so pointing both at
+      # the same URL is not a workaround; it is what "the direct connection"
+      # means here.
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/schemacheck
 
     steps:
       - uses: actions/checkout@v4
@@ -272,6 +280,14 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dbtests
+      # #500: schema.prisma declares `directUrl = env("DATABASE_URL_UNPOOLED")`,
+      # and Prisma resolves EVERY datasource env var before it will run a
+      # migration — so `prisma migrate deploy` below fails at config time,
+      # not connection time, if this is unset. The CI service Postgres is a
+      # plain container with no pooler in front of it, so pointing both at
+      # the same URL is not a workaround; it is what "the direct connection"
+      # means here.
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/dbtests
       RUN_DB_TESTS: '1'
 
     steps:

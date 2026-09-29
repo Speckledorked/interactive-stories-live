@@ -5,13 +5,21 @@
 # schema.prisma, so "Removed index" means the DATABASE has the index and the
 # datamodel does not.
 #
-# Every line below is one of the four indexes campaign_memories creates in raw
-# SQL (see 20260815070000_campaign_memory_ann_index and 0_baseline):
+# The campaign_memories block records the four indexes it creates in raw SQL
+# (see 20260815070000_campaign_memory_ann_index and 0_baseline):
 #
 #   CREATE INDEX ... USING hnsw (embedding vector_cosine_ops);
 #   CREATE INDEX ... USING GIN ("involvedCharacterIds");
 #   CREATE INDEX ... USING GIN ("involvedNpcIds");
 #   CREATE INDEX ... USING GIN ("involvedFactionIds");
+#
+# The lore_entries block records the same hnsw limitation for the second
+# pgvector column in the schema (#499, 20260929070000_lore_entry_ann_index):
+#
+#   CREATE INDEX ... USING hnsw (embedding vector_cosine_ops);
+#
+# Both are the tool's limitation, not drift — see below on what does and does
+# not belong here.
 #
 # The hnsw one is the reason this file exists. Prisma's schema language has no
 # syntax for pgvector access methods at all — it supports Gin, Gist, Hash,
@@ -40,3 +48,5 @@
   [-] Removed index on columns (involvedCharacterIds)
   [-] Removed index on columns (involvedFactionIds)
   [-] Removed index on columns (involvedNpcIds)
+[*] Changed the `lore_entries` table
+  [-] Removed index on columns (embedding)

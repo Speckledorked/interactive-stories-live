@@ -175,6 +175,11 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/game/stateUpdater.ts': 'deliver',
       'src/components/character/CharacterSheetDisplay.tsx': 'consume',
       'src/lib/game/resolution.ts': 'consume',
+      // #479: the starting-location gate branches on the theme, because a
+      // gate left on a row in a re-themed or imported campaign must not
+      // silently refuse a character creation — the same hasCorruptionTheme
+      // check every other gate makes.
+      'src/lib/game/characterCreation.ts': 'consume',
       'src/lib/game/worldUpdaters/bargainOffers.ts': 'consume',
       'src/lib/game/worldUpdaters/characters.ts': 'consume',
       'src/lib/game/worldUpdaters/quests.ts': 'consume',

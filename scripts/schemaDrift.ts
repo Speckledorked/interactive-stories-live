@@ -58,21 +58,56 @@ function isNoise(line: string): boolean {
   return false
 }
 
+/** A table header line, e.g. "[*] Changed the `lore_entries` table". */
+function tableOf(line: string): string | null {
+  const match = line.match(/^\[.\] (?:Changed|Added|Removed) the `([^`]+)` table$/)
+  return match ? match[1] : null
+}
+
 /**
- * Comparable form of a diff summary: meaningful lines, trimmed and sorted.
+ * Comparable form of a diff summary: meaningful lines, trimmed, QUALIFIED BY
+ * THEIR TABLE, and sorted.
  *
  * Sorted deliberately. Prisma does not promise a stable order for the index
  * lines inside a table block, and a check that fails because two lines swapped
  * places would be a check people rerun until it passes — which is the same as
  * not having one.
+ *
+ * Qualified because sorting a flat list throws away the one thing that makes a
+ * sub-line mean anything: which table it belongs to. That cost nothing while
+ * campaign_memories was the only table in the residual. #499 added an hnsw
+ * index to lore_entries, the schema's second pgvector column, and its diff line
+ * is character-for-character identical:
+ *
+ *     [-] Removed index on columns (embedding)
+ *
+ * Against a flat set those two lines are one line. The snapshot would have gone
+ * on passing with either index dropped, because the other still produced the
+ * text — a check quietly asserting half of what it claims, which is the exact
+ * failure mode this file's header warns about for stale exceptions.
  */
 export function normalizeDiff(output: string): DiffLine[] {
-  return output
-    .split('\n')
-    .filter((l) => !isNoise(l))
-    .map((l) => l.replace(/\s+$/, '').trimStart())
-    .filter((l) => l !== '')
-    .sort()
+  const qualified: DiffLine[] = []
+  let table: string | null = null
+
+  for (const raw of output.split('\n')) {
+    if (isNoise(raw)) continue
+    const line = raw.replace(/\s+$/, '').trimStart()
+    if (line === '') continue
+
+    const header = tableOf(line)
+    if (header) {
+      table = header
+      qualified.push(line)
+      continue
+    }
+    // A sub-line before any header keeps its bare form rather than being
+    // dropped: an unattributed line is still drift, and silently discarding
+    // it would be the same bug in the other direction.
+    qualified.push(table ? `${table}: ${line}` : line)
+  }
+
+  return qualified.sort()
 }
 
 /** `No difference detected.` is prisma's way of saying the diff is empty. */

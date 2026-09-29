@@ -14,9 +14,59 @@
 // This wrapper keeps each call site's own error handling intact: same
 // signature as fetch, and only intervenes on a 400 that names a
 // parameter it knows how to fix, retrying exactly once.
+//
+// #504 also made this the place for the concurrency bound and the 429
+// retry, because it is already the single funnel every provider call goes
+// through — sixteen call sites across nine files, none of which should
+// have to know about rate limits to be correct. See openaiThrottle.ts for
+// what those do and, just as importantly, what they do not.
+
+import { withConcurrencyLimit, backoffDelayMs, isRetryableStatus, THROTTLE_LIMITS } from './openaiThrottle'
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * fetch, plus: a slot from the per-instance concurrency gate, and retries
+ * on the provider's transient statuses.
+ *
+ * The slot is held across the retries on purpose. Releasing it while
+ * sleeping would let a waiting call start straight into the same rate
+ * limit that just rejected this one, which turns backoff into a queue that
+ * takes turns being refused.
+ *
+ * Returns the final response whatever it is, so every existing call site's
+ * own `if (!response.ok)` handling still reaches exactly the outcome it
+ * did before — this only changes how many attempts precede it.
+ */
+async function fetchWithBackoff(url: string, init: RequestInit): Promise<Response> {
+  return withConcurrencyLimit(async () => {
+    let response = await fetch(url, init)
+
+    for (let attempt = 0; attempt < THROTTLE_LIMITS.MAX_RATE_LIMIT_RETRIES; attempt++) {
+      if (!isRetryableStatus(response.status)) return response
+
+      const delay = backoffDelayMs(response, attempt)
+      console.warn(
+        `OpenAI ${response.status}; retrying in ${delay}ms (attempt ${attempt + 1}/${THROTTLE_LIMITS.MAX_RATE_LIMIT_RETRIES})`
+      )
+      await sleep(delay)
+      response = await fetch(url, init)
+    }
+
+    // Out of retries. Handing the last response back rather than throwing
+    // keeps the caller's fail-open path intact — but a 429 reaching here
+    // means the deployment is degrading to deterministic fallbacks, which
+    // reads as "the writing got worse" rather than as an error, so it is
+    // worth saying loudly.
+    if (isRetryableStatus(response.status)) {
+      console.error(`OpenAI ${response.status} after ${THROTTLE_LIMITS.MAX_RATE_LIMIT_RETRIES} retries — falling back`)
+    }
+    return response
+  })
+}
 
 export async function openaiFetch(url: string, init: RequestInit): Promise<Response> {
-  const response = await fetch(url, init)
+  const response = await fetchWithBackoff(url, init)
   if (response.status !== 400 || typeof init.body !== 'string') {
     return response
   }
@@ -64,5 +114,5 @@ export async function openaiFetch(url: string, init: RequestInit): Promise<Respo
       .filter(Boolean)
       .join(', ')}`
   )
-  return fetch(url, { ...init, body: JSON.stringify(payload) })
+  return fetchWithBackoff(url, { ...init, body: JSON.stringify(payload) })
 }

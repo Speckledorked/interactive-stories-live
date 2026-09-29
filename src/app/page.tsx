@@ -66,6 +66,18 @@ const FAQ = [
   },
 ]
 
+/**
+ * #497: this is invented copy, and it used to be presented as though it
+ * were the product's live feed — three plausible lines under the same
+ * "While you were away" heading the real recap uses, on a marketing page,
+ * with nothing saying they were made up. A stranger's only reading is that
+ * these are things that happened in somebody's world.
+ *
+ * It is not driven from real events, and should not be: a real feed here
+ * would publish one campaign's fiction to every visitor, and the away-recap
+ * is fog-gated per player for good reasons (see absenceJournal.ts). So it
+ * says what it is instead, in the frame rather than the fine print.
+ */
 function Ticker() {
   const events = [
     'The Ironveil withdrew from the eastern quarter — the third district they have abandoned this month.',
@@ -73,10 +85,15 @@ function Ticker() {
     'Sera Voss was seen in Aldermere. Nobody has said why.',
   ]
   return (
-    <div className="rounded-xl border border-myth-border bg-myth-surface-sunken p-5">
-      <p className="mb-3 font-display text-sm uppercase tracking-wider text-myth-ink-faint">
-        While you were away
-      </p>
+    <figure className="m-0 rounded-xl border border-myth-border bg-myth-surface-sunken p-5">
+      <figcaption className="mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-display text-sm uppercase tracking-wider text-myth-ink-faint">
+          While you were away
+        </span>
+        <span className="rounded-full border border-myth-border px-2 py-0.5 text-[11px] uppercase tracking-widest text-myth-ink-faint">
+          Example
+        </span>
+      </figcaption>
       <ul className="space-y-3">
         {events.map((e) => (
           <li key={e} className="border-l-2 border-myth-accent/40 pl-3 text-sm text-myth-ink-muted">
@@ -84,7 +101,10 @@ function Ticker() {
           </li>
         ))}
       </ul>
-    </div>
+      <p className="mt-4 text-xs text-myth-ink-faint">
+        An illustration of the summary a returning player sees. Yours comes from your own world.
+      </p>
+    </figure>
   )
 }
 

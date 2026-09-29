@@ -11,10 +11,29 @@ import { pruneCampaignHistory } from '@/lib/game/retention'
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
+import { reportError } from '@/lib/monitoring'
 
 // Hobby-plan-safe. sweepWorldTurnsForAllCampaigns caps how many campaigns
 // get a full (AI-calling) world turn per sweep for the same reason.
 export const maxDuration = 60
+
+/**
+ * Every non-fatal step below logs and continues, which is right — one
+ * failing sweep must not cost the others. But #492: "logs and continues"
+ * used to mean the ONLY record was a console line in a drain nobody reads.
+ * This is a daily unattended job with no human watching it run; if it
+ * quietly stops doing half its work, the first symptom is a player noticing
+ * their world stopped moving.
+ *
+ * So each step now also alerts. Awaited rather than fire-and-forget here,
+ * unlike the API-route path: nothing is waiting on this response, and a
+ * serverless invocation that returns can have its pending work cut off
+ * mid-flight.
+ */
+async function nonFatal(context: string, error: unknown): Promise<void> {
+  console.error(`Cron: ${context} (non-fatal):`, error)
+  await reportError(`cron-${context}`, error)
+}
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
@@ -24,9 +43,7 @@ export async function GET(request: NextRequest) {
 
   // Bonus: this was also purely traffic-piggybacked before — a stuck
   // resolution job in a campaign nobody revisits could sit stuck forever.
-  await sweepGloballyStuckResolutionJobs().catch(err =>
-    console.error('Cron: stuck-job sweep failed (non-fatal):', err)
-  )
+  await sweepGloballyStuckResolutionJobs().catch(err => nonFatal('stuck-job-sweep', err))
 
   // Turn-tracker upkeep (#6/#52). Both functions were fully implemented
   // with zero callers, so the countdown the TurnTracker UI renders visibly
@@ -38,11 +55,9 @@ export async function GET(request: NextRequest) {
   // tracker that has explicitly opted in. sendPeriodicReminders just
   // nudges; nudging is exactly what an advisory queue should do when a
   // deadline is approaching.
-  await TurnTracker.sendPeriodicReminders().catch(err =>
-    console.error('Cron: turn reminders failed (non-fatal):', err)
-  )
-  const autoAdvanced = await TurnTracker.checkExpiredTurns().catch(err => {
-    console.error('Cron: expired-turn sweep failed (non-fatal):', err)
+  await TurnTracker.sendPeriodicReminders().catch(err => nonFatal('turn-reminders', err))
+  const autoAdvanced = await TurnTracker.checkExpiredTurns().catch(async err => {
+    await nonFatal('expired-turn-sweep', err)
     return 0
   })
   if (autoAdvanced) {
@@ -54,15 +69,26 @@ export async function GET(request: NextRequest) {
   // deadline. This notifies each affected campaign's admins once per
   // deadline (gated on TurnTracker.overdueNotifiedAt, cleared whenever a
   // new deadline is set), not every sweep.
-  const overdueNotified = await TurnTracker.notifyOverdueTurns().catch(err => {
-    console.error('Cron: overdue-turn notification sweep failed (non-fatal):', err)
+  const overdueNotified = await TurnTracker.notifyOverdueTurns().catch(async err => {
+    await nonFatal('overdue-turn-notifications', err)
     return 0
   })
   if (overdueNotified) {
     console.log(`⏸️  Cron: notified hosts of ${overdueNotified} overdue turn(s)`)
   }
 
-  const result = await sweepWorldTurnsForAllCampaigns()
+  // The sweep itself is the job. A throw here means the world did not move
+  // for anyone today, which is the single loudest thing this route can
+  // have to say — so it alerts and returns a 500 rather than letting the
+  // invocation succeed with a body describing nothing.
+  let result
+  try {
+    result = await sweepWorldTurnsForAllCampaigns()
+  } catch (error) {
+    console.error('Cron: world-turn sweep failed:', error)
+    await reportError('cron-world-turn-sweep-failed', error)
+    return NextResponse.json({ error: 'World-turn sweep failed' }, { status: 500 })
+  }
   console.log(
     `🌍 Cron world-turn sweep: ${result.ticked}/${result.campaignsChecked} campaigns ticked, ` +
     `${result.failed} failed, ${result.skippedAtCap} deferred to tomorrow`
@@ -91,7 +117,7 @@ export async function GET(request: NextRequest) {
         pruned.diceRollsDeleted +
         pruned.aiCostEntriesDeleted
     } catch (err) {
-      console.error(`Cron: retention pass failed for campaign ${campaignId} (non-fatal):`, err)
+      await nonFatal(`retention-pass (campaign ${campaignId})`, err)
     }
   }
   if (prunedRows > 0) {

@@ -1904,6 +1904,7 @@ export default function StoryPage() {
             onSelectCharacter={setSelectedCharacterId}
             selectedCharacter={selectedCharacter}
             onShowSnapshot={() => setShowCharacterSnapshot(true)}
+            campaignId={campaignId}
           />
 
           <TurnOrderPanel

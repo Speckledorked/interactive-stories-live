@@ -30,6 +30,13 @@ import { join } from 'path'
 
 const API = join(__dirname, '..')
 
+/**
+ * The `*-health` DIAGNOSTIC routes. Not `/api/health`, which is the public
+ * liveness target an external uptime monitor polls (#492) and is anonymous
+ * on purpose — a monitor cannot sign in, and that route deliberately says
+ * nothing beyond a status code. The suffix is what separates the two, so
+ * a new diagnostic must be named `<thing>-health` to inherit this guard.
+ */
 function healthRoutes(): string[] {
   return readdirSync(API)
     .filter((d) => d.endsWith('-health'))

@@ -60,7 +60,13 @@ export default function CampaignLobbyPage() {
   const [data, setData] = useState<CampaignData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreateCharacter, setShowCreateCharacter] = useState(false)
+  // #495: the creation form lived behind lobby state with no URL, so
+  // nothing elsewhere in the app could send anyone to it — which is why the
+  // story page had no CTA to offer a player with no character. Honouring a
+  // param makes it a real destination.
+  const [showCreateCharacter, setShowCreateCharacter] = useState(
+    searchParams.get('create') === 'character'
+  )
   const [activeTab, setActiveTabState] = useState<LobbyTab>(initialTab)
 
   const setActiveTab = (tab: LobbyTab) => {

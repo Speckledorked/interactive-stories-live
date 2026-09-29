@@ -1,0 +1,20 @@
+-- #499: lore_entries.embedding had no ANN index.
+--
+-- campaign_memories got one in #286 (see
+-- 20260815070000_campaign_memory_ann_index) after exactly this was found
+-- there: the surrounding code describes an approximate-nearest-neighbour
+-- lookup, and without an index `ORDER BY embedding <=> $1` is an exact
+-- sequential scan and sort over every embedded row. lore_entries is the
+-- other pgvector table in the schema, read by retrieveRelevantLore on
+-- every lore-augmented call, and it was missed.
+--
+-- HNSW for the same reason the memory index uses it rather than ivfflat:
+-- ivfflat's recall depends on the data present at CREATE INDEX time, and
+-- this table starts empty and fills as a campaign imports lore, so an
+-- ivfflat index built now would need a manual rebuild later to be any
+-- good. HNSW has no cold-start requirement.
+--
+-- vector_cosine_ops to match the `<=>` operator the query actually uses;
+-- an index built for a different distance function is simply never
+-- consulted, which fails silently as a missing index does.
+CREATE INDEX "lore_entries_embedding_idx" ON "lore_entries" USING hnsw (embedding vector_cosine_ops);

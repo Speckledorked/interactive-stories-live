@@ -15,6 +15,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Coins, Handshake, HeartHandshake, Sparkles, Swords, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { activeTexts } from '@/lib/game/consequenceRecords'
+import { CONSEQUENCE_LABELS } from '@/lib/game/consequenceLabels'
 import { parseAdvancementTrack, tierProgress, slotProgress } from '@/lib/game/advancementTrack'
 
 interface CharacterSnapshotModalProps {
@@ -403,7 +404,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'enemy').length > 0 && (
                       <div>
-                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-danger"><Swords className="h-4 w-4" />ENEMIES</h3>
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-danger"><Swords className="h-4 w-4" />{CONSEQUENCE_LABELS.enemy.heading}</h3>
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'enemy')
@@ -418,7 +419,7 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'promise').length > 0 && (
                       <div>
-                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-good"><Handshake className="h-4 w-4" />PROMISES</h3>
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-good"><Handshake className="h-4 w-4" />{CONSEQUENCE_LABELS.promise.heading}</h3>
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'promise')
@@ -433,7 +434,20 @@ export default function CharacterSnapshotModal({
 
                     {allConsequences.filter(c => c.type === 'debt').length > 0 && (
                       <div>
-                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-warn"><Coins className="h-4 w-4" />DEBTS</h3>
+                        {/* #475: "DEBTS", bare, was the whole bug. This list
+                            is Character.consequences.debts — freeform strings
+                            with no link to Debt.status, so an entry here can
+                            never be marked settled and may describe an
+                            obligation paid off in fiction long ago. #292
+                            relabelled it "Noted Debt" in ConsequenceBadge and
+                            this heading never heard about it, so the character
+                            sheet went on presenting possibly-settled flavour
+                            text as live obligations. Both now read the same
+                            copy from lib/game/consequenceLabels.ts. */}
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium text-myth-warn"><Coins className="h-4 w-4" />{CONSEQUENCE_LABELS.debt.heading}</h3>
+                        {CONSEQUENCE_LABELS.debt.note && (
+                          <p className="mb-2 text-xs text-myth-ink-faint">{CONSEQUENCE_LABELS.debt.note}</p>
+                        )}
                         <div className="space-y-2">
                           {allConsequences
                             .filter(c => c.type === 'debt')

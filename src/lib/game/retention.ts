@@ -216,3 +216,95 @@ export async function pruneCampaignHistory(campaignId: string): Promise<Retentio
   }
 }
 
+
+/**
+ * #501: how long a notification is kept once the person is done with it.
+ *
+ * Only READ and DISMISSED rows are eligible. An UNREAD notification is
+ * still doing its job however old it is — deleting one would silently
+ * withdraw a message the person never saw, which is worse than the storage
+ * it occupies. The row also carries no value after a couple of months:
+ * nothing reads dismissed notifications, and nothing offers a history view.
+ */
+export const READ_NOTIFICATION_RETENTION_MS = 90 * 24 * 60 * 60 * 1000
+
+/**
+ * #501: analytics events are kept for the reporting window and no longer.
+ *
+ * Matched to ANALYTICS_TOTALS_LOOKBACK_DAYS (analytics/events.ts) for the
+ * same reason AI_COST_RETENTION_MS is: if retention were shorter than the
+ * lookback, the dashboard's "totals" would quietly start meaning "totals
+ * since whenever pruning last caught up", which is a number that looks
+ * exactly like a real one.
+ */
+export const ANALYTICS_EVENT_RETENTION_MS = 730 * 24 * 60 * 60 * 1000
+
+export interface GlobalRetentionResult {
+  notificationsDeleted: number
+  analyticsEventsDeleted: number
+}
+
+/**
+ * Prune the platform-wide tables, once per sweep.
+ *
+ * Separate from pruneCampaignHistory for two reasons. These tables are not
+ * campaign-scoped — a notification belongs to a person, an analytics event
+ * may have no campaign at all — and, more importantly, #501's own
+ * observation: per-campaign retention only runs for campaigns that TICKED.
+ * A dormant campaign is pruned never, and a user who stopped playing
+ * entirely accumulates notifications forever, because no campaign of
+ * theirs is ticking to carry the pass.
+ *
+ * What is deliberately NOT here, and why — because "six tables have no
+ * delete path" is true and is not by itself a defect:
+ *
+ *   Transaction     the accounting trail behind every charge and top-up.
+ *                   Deleting it is not a retention policy, it is destroying
+ *                   financial records, and /privacy commits to keeping them.
+ *   CampaignLog     the player-facing chronicle a returning player reads.
+ *   Message         chat. Both are the durable record, and pruning them
+ *                   would delete the very thing the away-recap exists for
+ *                   — see this module's own header on that boundary.
+ *   PlayerAction    the actions a scene resolved from. Removing them
+ *                   orphans the reasoning behind narration that remains.
+ *
+ * Those four are decisions, not omissions. They are written down here so
+ * the next audit finds an answer rather than a gap.
+ */
+export async function pruneGlobalTables(): Promise<GlobalRetentionResult> {
+  const notificationCutoff = new Date(Date.now() - READ_NOTIFICATION_RETENTION_MS)
+  const analyticsCutoff = new Date(Date.now() - ANALYTICS_EVENT_RETENTION_MS)
+
+  // Bounded the same way pruneCampaignHistory is, and for the same reason:
+  // this shares a cron invocation with the world-turn sweep, which has its
+  // own duration budget. A backlog is worked off across runs.
+  const staleNotifications = await prisma.notification.findMany({
+    where: {
+      status: { in: ['READ', 'DISMISSED'] },
+      createdAt: { lt: notificationCutoff },
+    },
+    select: { id: true },
+    take: RETENTION_BATCH_SIZE,
+    orderBy: { createdAt: 'asc' },
+  })
+
+  const notifications = staleNotifications.length
+    ? await prisma.notification.deleteMany({ where: { id: { in: staleNotifications.map((n) => n.id) } } })
+    : { count: 0 }
+
+  const staleAnalytics = await prisma.analyticsEvent.findMany({
+    where: { createdAt: { lt: analyticsCutoff } },
+    select: { id: true },
+    take: RETENTION_BATCH_SIZE,
+    orderBy: { createdAt: 'asc' },
+  })
+
+  const analytics = staleAnalytics.length
+    ? await prisma.analyticsEvent.deleteMany({ where: { id: { in: staleAnalytics.map((e) => e.id) } } })
+    : { count: 0 }
+
+  return {
+    notificationsDeleted: notifications.count,
+    analyticsEventsDeleted: analytics.count,
+  }
+}

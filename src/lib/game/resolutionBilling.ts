@@ -29,6 +29,12 @@ const MIN_CHARGE_CENTS = 5
 // scene attempt a call its participants can't cover.
 const PREFLIGHT_BUFFER_CENTS = 20
 
+// #487: the same conservative single-call figure, for the scene INTRO,
+// which happens before any scene row exists to accrue cost against. Named
+// separately from the resolution buffer because the two answer different
+// questions and will drift apart the moment either call's model changes.
+const SCENE_START_ESTIMATE_CENTS = PREFLIGHT_BUFFER_CENTS
+
 export interface BillingResult {
   ok: boolean
   error?: string
@@ -124,6 +130,47 @@ export async function preflightSceneBilling(sceneId: string): Promise<BillingRes
   const affordability = await checkPayersCanAfford(payerIds, costPerPlayer)
   if (!affordability.ok) return affordability
   return { ok: true, playerCount: payerIds.length, costPerPlayer }
+}
+
+/**
+ * Run BEFORE a scene is created, which is before there is a scene id to
+ * bill against — so this takes the intended participants directly.
+ *
+ * #487: start-scene had no billing hook at all. Only end-scene did, so a
+ * player at zero balance could start scenes and run mid-scene exchanges
+ * indefinitely, spending real money on every one, and the block landed
+ * only at scene end. welcomeCredit.ts's claim that "nothing starts work it
+ * cannot pay for" described an intention, not the code.
+ *
+ * Deliberately an estimate rather than a charge: the intro's real cost is
+ * unknown until it has been generated, and it is billed at scene end along
+ * with every other call the scene makes. This only refuses to *begin* work
+ * that visibly cannot be paid for.
+ *
+ * Returns ok with playerCount 0 when there is nobody to bill — a scene
+ * with no player-owned characters costs the same to run, but there is no
+ * balance to check and refusing would block a legitimate GM-only scene.
+ */
+export async function preflightSceneStart(
+  characterIds: string[],
+  requesterUserId: string
+): Promise<BillingResult> {
+  const characters = characterIds.length
+    ? await prisma.character.findMany({
+        where: { id: { in: characterIds } },
+        select: { userId: true },
+      })
+    : []
+
+  // Fall back to the requester exactly as end-scene's payer resolution
+  // does, so "who pays" has one answer across both ends of a scene.
+  const payerIds = Array.from(new Set(characters.map(c => c.userId)))
+  const payers = payerIds.length > 0 ? payerIds : [requesterUserId]
+
+  const costPerPlayer = Math.ceil(SCENE_START_ESTIMATE_CENTS / payers.length)
+  const affordability = await checkPayersCanAfford(payers, costPerPlayer)
+  if (!affordability.ok) return affordability
+  return { ok: true, playerCount: payers.length, costPerPlayer }
 }
 
 /**

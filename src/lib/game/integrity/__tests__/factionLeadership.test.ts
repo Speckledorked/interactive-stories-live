@@ -4,6 +4,8 @@ import {
   repairFactionLeadership,
   factionHasAtMostOneLivingLeader,
   repairFactionLeadershipConflict,
+  factionLeaderCharacterIsAlive,
+  repairFactionLeaderCharacterAlive,
 } from '../checks/factionLeadership'
 import { emptySnapshot } from './testHelpers'
 import { Violation } from '../types'
@@ -202,5 +204,104 @@ describe('repairFactionLeadershipConflict', () => {
     expect(repair?.write).toEqual({ model: 'nPC', id: 'npc1', data: { factionRole: 'MEMBER' } })
     expect(repair?.previousValue).toBe('LEADER')
     expect(repair?.newValue).toBe('MEMBER')
+  })
+})
+
+describe('factionLeaderCharacterIsAlive (#476)', () => {
+  const pc = (overrides: Record<string, any> = {}) => ({
+    id: 'char1', name: 'Vale', isAlive: true, relationships: null, resources: null, ...overrides,
+  })
+
+  it('flags a faction still led by a dead player character', () => {
+    const snapshot = emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
+      characters: [pc({ isAlive: false })],
+    })
+    const violations = factionLeaderCharacterIsAlive.run(snapshot)
+    expect(violations).toHaveLength(1)
+    expect(violations[0].entityType).toBe('FACTION')
+    expect(violations[0].description).toContain('Vale')
+  })
+
+  it('flags a leaderCharacterId that points at nothing', () => {
+    const snapshot = emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'ghost' }],
+      characters: [],
+    })
+    expect(factionLeaderCharacterIsAlive.run(snapshot)).toHaveLength(1)
+  })
+
+  it('does not flag a living leader, an empty slot, or a collapsed faction', () => {
+    expect(factionLeaderCharacterIsAlive.run(emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
+      characters: [pc()],
+    }))).toHaveLength(0)
+
+    expect(factionLeaderCharacterIsAlive.run(emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
+      characters: [pc({ isAlive: false })],
+    }))).toHaveLength(0)
+
+    expect(factionLeaderCharacterIsAlive.run(emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: false, leaderCharacterId: 'char1' }],
+      characters: [pc({ isAlive: false })],
+    }))).toHaveLength(0)
+  })
+
+  it('is the precondition the other two leadership checks silently depend on', () => {
+    // The heart of #476: with the FK still set, BOTH of the checks built to
+    // police leadership report a perfectly healthy faction — one whose
+    // leader is dead and whose living members can never be promoted.
+    const snapshot = emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
+      characters: [pc({ isAlive: false })],
+      npcs: [npc({ id: 'npc1', name: 'Kessler', importance: 3 })],
+    })
+
+    expect(factionHasOneLivingLeader.run(snapshot)).toHaveLength(0)
+    expect(factionHasAtMostOneLivingLeader.run(snapshot)).toHaveLength(0)
+    expect(factionLeaderCharacterIsAlive.run(snapshot)).toHaveLength(1)
+
+    // ...and once the FK is released, succession becomes visible.
+    const released = emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
+      characters: [pc({ isAlive: false })],
+      npcs: [npc({ id: 'npc1', name: 'Kessler', importance: 3 })],
+    })
+    expect(factionHasOneLivingLeader.run(released)).toHaveLength(1)
+  })
+})
+
+describe('repairFactionLeaderCharacterAlive (#476)', () => {
+  const violation = (): Violation => ({
+    checkKey: 'faction.leaderCharacterId.alive',
+    entityType: 'FACTION',
+    entityId: 'f1',
+    entityName: 'The Crown',
+    description: 'dead leader',
+  })
+
+  it('clears the stale FK on the faction itself', () => {
+    const snapshot = emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: 'char1' }],
+      characters: [{ id: 'char1', name: 'Vale', isAlive: false, relationships: null, resources: null }],
+    })
+
+    const repair = repairFactionLeaderCharacterAlive(violation(), snapshot)
+
+    expect(repair).not.toBeNull()
+    expect(repair!.write).toEqual({ model: 'faction', id: 'f1', data: { leaderCharacterId: null } })
+    // Reported on the faction, not on an NPC: nothing has been promoted
+    // yet. That happens on the following pass, once the vacancy is visible.
+    expect(repair!.entityType).toBe('FACTION')
+    expect(repair!.field).toBe('leaderCharacterId')
+    expect(repair!.previousValue).toBe('char1')
+  })
+
+  it('declines when the faction is gone or already released', () => {
+    expect(repairFactionLeaderCharacterAlive(violation(), emptySnapshot({}))).toBeNull()
+    expect(repairFactionLeaderCharacterAlive(violation(), emptySnapshot({
+      factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
+    }))).toBeNull()
   })
 })

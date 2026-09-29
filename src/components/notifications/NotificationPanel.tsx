@@ -12,6 +12,8 @@ import { NOTIFICATION_ICONS, NOTIFICATION_FALLBACK_ICON } from '@/lib/ui/icons';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Inbox } from 'lucide-react'
+import { userChannel } from '@/lib/realtime/channels'
+import { useRealtimeReconnect } from '@/hooks/useRealtimeReconnect'
 
 interface Notification {
   id: string;
@@ -62,6 +64,14 @@ export default function NotificationPanel({
     };
   }, [isOpen, filter, campaignId]);
 
+  // #502: the list is event-driven once open, and Pusher events published
+  // while disconnected are gone — so a dropped connection froze this panel
+  // on whatever it last heard, looking exactly like having nothing new.
+  // Only while open: a closed panel refetches on its next open anyway.
+  useRealtimeReconnect(() => {
+    if (isOpen) fetchNotifications();
+  });
+
   const fetchNotifications = async () => {
     setLoading(true);
     try {
@@ -96,7 +106,7 @@ export default function NotificationPanel({
       return;
     }
 
-    const channel = pusher.subscribe(`user-${userId}`);
+    const channel = pusher.subscribe(userChannel(userId));
 
     channel.bind('notification-received', (notification: any) => {
       setNotifications(prev => [notification, ...prev]);
@@ -142,7 +152,7 @@ export default function NotificationPanel({
   const cleanup = () => {
     const pusher = getPusherClient();
     if (!pusher) return;
-    pusher.unsubscribe(`user-${userId}`);
+    pusher.unsubscribe(userChannel(userId));
   };
 
   const markAsRead = async (notificationId: string) => {

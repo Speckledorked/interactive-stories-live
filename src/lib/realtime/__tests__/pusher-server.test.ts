@@ -39,7 +39,7 @@ beforeEach(() => {
 describe('triggerNoteUpdate', () => {
   it('publishes a SHARED note on the campaign channel', async () => {
     await triggerNoteUpdate(note())
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'note-update', expect.objectContaining({ id: 'note1' }))
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'note-update', expect.objectContaining({ id: 'note1' }))
   })
 
   it('publishes a GM note', async () => {

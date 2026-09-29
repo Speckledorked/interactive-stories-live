@@ -6,9 +6,10 @@
 
 'use client'
 
+import Link from 'next/link'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { MapPin } from 'lucide-react'
+import { MapPin, UserPlus } from 'lucide-react'
 
 interface CharacterSelectorPanelProps {
   userCharacters: any[]
@@ -16,6 +17,8 @@ interface CharacterSelectorPanelProps {
   onSelectCharacter: (characterId: string) => void
   selectedCharacter: any
   onShowSnapshot: () => void
+  /** Needed for the no-characters CTA below. */
+  campaignId: string
 }
 
 export function CharacterSelectorPanel({
@@ -24,8 +27,35 @@ export function CharacterSelectorPanel({
   onSelectCharacter,
   selectedCharacter,
   onShowSnapshot,
+  campaignId,
 }: CharacterSelectorPanelProps) {
-  if (userCharacters.length === 0) return null
+  // #495: this used to `return null`, and the story page is reachable in one
+  // tap from the mobile bottom bar. So a first-time player on a phone tapped
+  // Story, saw scenes, could even start one — and then found no way to act,
+  // because every action control is gated on selectedCharacterId and the
+  // only thing that could set it had rendered nothing at all. A blank space
+  // does not read as "you need a character"; it reads as a broken page.
+  //
+  // The gate is right. Silence was the bug.
+  if (userCharacters.length === 0) {
+    return (
+      <div className="rounded-lg border border-myth-border bg-myth-surface p-5">
+        <h3 className="mb-2 text-sm font-medium uppercase tracking-wide text-myth-ink-faint">
+          No character yet
+        </h3>
+        <p className="mb-4 text-sm text-myth-ink-muted">
+          You can read the story without one. To act in a scene, you need someone to act as.
+        </p>
+        <Link
+          href={`/campaigns/${campaignId}?create=character`}
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-myth-accent px-4 text-sm font-medium text-myth-accent-ink transition-colors hover:bg-myth-accent-hover touch-manipulation"
+        >
+          <UserPlus className="h-4 w-4" />
+          Create a character
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-lg border border-myth-border bg-myth-surface p-5">

@@ -3,8 +3,19 @@
 # fix merges itself once the mechanical checks below pass. That's a
 # deliberate choice, not an oversight; read on for what replaces a human.
 #
-# ENABLED FOR AUTOPILOT (`schedule` below is live) — read this before
-# changing that. VERIFIED, not just designed: fired manually
+# SCHEDULE: manual
+#
+# That line is machine-read (src/lib/__tests__/autofixScheduleClaim.test.ts)
+# and must agree with the `on:` block below — `manual` or `live`, nothing
+# else. It exists because prose drifted: this header used to say "ENABLED
+# FOR AUTOPILOT (`schedule` below is live)" directly above an `on:` block
+# containing only `workflow_dispatch`, and docs/ARCHITECTURE.md's Scorecard
+# said the same. #394 had taken the schedule off months earlier and told
+# neither of them (#478). The `on:` block states the three gaps that have
+# to close before the schedule comes back.
+#
+# The no-human-review design below is deliberate and stays. VERIFIED, not
+# just designed: fired manually
 # (workflow_dispatch) 12 times against a real, deliberately seeded bug
 # (character.relationships.keys.resolve — see docs/ARCHITECTURE.md's
 # Scorecard row for this pipeline and its Known Bugs entries), the last of

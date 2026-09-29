@@ -1,6 +1,7 @@
 // src/lib/realtime/pusher-client.ts
 
 import Pusher from 'pusher-js';
+import { campaignChannel, userChannel } from './channels';
 
 let pusherInstance: Pusher | null = null;
 
@@ -21,6 +22,13 @@ export function getPusherClient(): Pusher | null {
     pusherInstance = new Pusher(pusherKey, {
       cluster: pusherCluster,
       forceTLS: true,
+      // #491: every channel is `private-` now, and pusher-js will not
+      // subscribe to one without a signed grant from this endpoint. No
+      // credentials are configured here on purpose — the session lives in
+      // httpOnly cookies the browser attaches to a same-origin POST by
+      // itself, which is also why there is nothing here for a script on
+      // another origin to borrow.
+      authEndpoint: '/api/pusher/auth',
     });
   }
   return pusherInstance;
@@ -29,13 +37,13 @@ export function getPusherClient(): Pusher | null {
 export function subscribeToCampaignMessages(campaignId: string) {
   const pusher = getPusherClient();
   if (!pusher) return null;
-  return pusher.subscribe(`campaign-${campaignId}`);
+  return pusher.subscribe(campaignChannel(campaignId));
 }
 
 export function subscribeToUserWhispers(userId: string) {
   const pusher = getPusherClient();
   if (!pusher) return null;
-  return pusher.subscribe(`user-${userId}`);
+  return pusher.subscribe(userChannel(userId));
 }
 
 export function unsubscribeFromChannel(channelName: string) {

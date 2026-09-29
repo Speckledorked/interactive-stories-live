@@ -21,6 +21,7 @@ vi.mock('@/lib/rateLimit', () => ({
 vi.mock('@/lib/lore/seedingGate', () => ({ isWorldSeeding: vi.fn(), SEEDING_MESSAGE: 'seeding' }))
 vi.mock('@/lib/game/sceneResolver', () => ({ createNewScene: vi.fn() }))
 vi.mock('@/lib/analytics/events', () => ({ recordEvent: vi.fn() }))
+vi.mock('@/lib/game/resolutionBilling', () => ({ preflightSceneStart: vi.fn() }))
 
 import { requireAuth } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
@@ -29,6 +30,7 @@ import { checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { isWorldSeeding } from '@/lib/lore/seedingGate'
 import { createNewScene } from '@/lib/game/sceneResolver'
 import { recordEvent } from '@/lib/analytics/events'
+import { preflightSceneStart } from '@/lib/game/resolutionBilling'
 import { POST } from '../route'
 
 const db = prisma as any
@@ -47,6 +49,7 @@ beforeEach(() => {
   ;(checkRateLimit as any).mockResolvedValue({ allowed: true })
   ;(getCampaignMembership as any).mockResolvedValue({ role: 'PLAYER' })
   ;(isWorldSeeding as any).mockResolvedValue(false)
+  ;(preflightSceneStart as any).mockResolvedValue({ ok: true, playerCount: 1 })
   db.scene.findMany.mockResolvedValue([])
 })
 
@@ -125,5 +128,43 @@ describe('POST', () => {
     ;(createNewScene as any).mockRejectedValue(new Error('AI call failed'))
     const response = await POST(req({}), { params: { id: 'camp1' } })
     expect(response.status).toBe(500)
+  })
+})
+
+describe('POST balance preflight (#487)', () => {
+  it('refuses with 402 before generating anything', async () => {
+    // The whole point: the refusal has to land BEFORE createNewScene,
+    // because createNewScene is the spend. Billing hooks used to exist
+    // only in end-scene, so this check happened after the money was gone.
+    ;(preflightSceneStart as any).mockResolvedValue({
+      ok: false,
+      error: 'Insufficient balance',
+      details: 'Ada (has $0.00, needs $0.20)',
+    })
+
+    const response = await POST(req({}), { params: { id: 'camp1' } })
+
+    expect(response.status).toBe(402)
+    expect(createNewScene).not.toHaveBeenCalled()
+    const body = await response.json()
+    expect(body.error).toBe('Insufficient balance')
+    // The detail names who is short and by how much — a bare 402 leaves a
+    // group with no way to know which of them has to top up.
+    expect(body.details).toContain('Ada')
+  })
+
+  it('runs the preflight for the characters actually joining the scene', async () => {
+    db.character.findMany.mockResolvedValue([
+      { id: 'char1', userId: 'player1', name: 'Ada' },
+      { id: 'char2', userId: 'player2', name: 'Bo' },
+    ])
+    ;(createNewScene as any).mockResolvedValue({
+      id: 'scene1', sceneNumber: 1, sceneIntroText: 'x', status: 'ACTIVE',
+      participants: { userIds: ['player1', 'player2'] }, createdAt: new Date(),
+    })
+
+    await POST(req({ characterIds: ['char1', 'char2'] }), { params: { id: 'camp1' } })
+
+    expect(preflightSceneStart).toHaveBeenCalledWith(['char1', 'char2'], 'player1')
   })
 })

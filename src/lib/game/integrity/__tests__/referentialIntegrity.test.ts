@@ -59,7 +59,7 @@ describe('characterRelationshipKeysResolve', () => {
     const snapshot = emptySnapshot({
       npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
       characters: [{
-        id: 'char1', name: 'Jason',
+        id: 'char1', name: 'Jason', isAlive: true,
         relationships: { npc1: { trust: 10 }, 'npc_123': { trust: 5 } },
         resources: null,
       }],
@@ -72,12 +72,12 @@ describe('characterRelationshipKeysResolve', () => {
   it('does not flag when every key resolves, or relationships is null', () => {
     const withValid = emptySnapshot({
       npcs: [{ id: 'npc1', name: 'Kessler', isAlive: true, factionId: null, factionRole: null, importance: 1 }],
-      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: null }],
+      characters: [{ id: 'char1', name: 'Jason', isAlive: true, relationships: null, resources: null }],
     })
     expect(characterRelationshipKeysResolve.run(withValid)).toHaveLength(0)
 
     const withNull = emptySnapshot({
-      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: null }],
+      characters: [{ id: 'char1', name: 'Jason', isAlive: true, relationships: null, resources: null }],
     })
     expect(characterRelationshipKeysResolve.run(withNull)).toHaveLength(0)
   })
@@ -136,7 +136,7 @@ describe('characterReputationKeysResolve', () => {
   it('flags an orphan faction id inside resources.reputation', () => {
     const snapshot = emptySnapshot({
       factions: [{ id: 'f1', name: 'The Crown', isActive: true, leaderCharacterId: null }],
-      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: { gold: 0, reputation: { f1: 10, 'f-gone': -5 } } }],
+      characters: [{ id: 'char1', name: 'Jason', isAlive: true, relationships: null, resources: { gold: 0, reputation: { f1: 10, 'f-gone': -5 } } }],
     })
     const violations = characterReputationKeysResolve.run(snapshot)
     expect(violations).toHaveLength(1)
@@ -145,7 +145,7 @@ describe('characterReputationKeysResolve', () => {
 
   it('does not throw when resources has no reputation field at all', () => {
     const snapshot = emptySnapshot({
-      characters: [{ id: 'char1', name: 'Jason', relationships: null, resources: { gold: 0 } }],
+      characters: [{ id: 'char1', name: 'Jason', isAlive: true, relationships: null, resources: { gold: 0 } }],
     })
     expect(characterReputationKeysResolve.run(snapshot)).toHaveLength(0)
   })

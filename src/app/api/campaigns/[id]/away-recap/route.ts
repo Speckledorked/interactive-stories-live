@@ -4,6 +4,24 @@
 // reloads and would otherwise reset lastViewedAt every few seconds). Only
 // the lobby page should call this: it's the actual "I came back and looked"
 // signal.
+//
+// #505: GET reads, POST advances the checkpoint. It used to be one GET that
+// did both, which was wrong twice over.
+//
+// As CSRF: the session cookie is SameSite=Lax, which suppresses cross-site
+// fetches and image loads but NOT top-level navigation — so a link on any
+// page could make a signed-in visitor burn their own recap window. Small
+// damage, but a state change nobody asked for, on the method the whole web
+// assumes is safe.
+//
+// As correctness, which is the bigger half: the server was inferring "the
+// player has seen this" from "the response was non-empty". A response lost
+// in flight, a tab closed mid-render, a client-side error — each of those
+// consumed the absence for good, because nothing records that a recap was
+// never delivered. An explicit acknowledgement is the only thing that
+// actually knows. The client sends back the checkpoint it was given, so
+// events that arrived between the read and the acknowledgement stay
+// unseen rather than being skipped.
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
@@ -88,26 +106,77 @@ export async function GET(
       ? await buildAbsenceJournalFor(campaignId, previousLastViewedAt, membership.role)
       : null
 
-    // #396: only advance the checkpoint when the player was actually shown
-    // something. This used to fire unconditionally, which had two costs.
-    // A player who opens the lobby every half hour reset lastViewedAt on
-    // every visit, so `awayMs` never reached MIN_AWAY_MS and they could
-    // never receive a recap at all — the checkpoint starved the feature it
-    // exists for. And a response lost in flight still burned the window:
-    // the absence it described was gone for good, because nothing else
-    // records that it was never delivered. Not advancing on an empty recap
-    // makes the call idempotent in the way that matters — repeat it and you
-    // get the same answer until it has something to say.
-    if (recap || (journal && journal.entries.length > 0)) {
-      await prisma.campaignMembership.update({
-        where: { id: membership.id },
-        data: { lastViewedAt: now },
-      })
-    }
+    // The checkpoint the client sends back to POST once it has actually
+    // rendered this. Read from `now`, captured before the queries above, so
+    // anything that happened while they ran stays on the unseen side.
+    //
+    // #396's rule still holds and now lives on the POST: only advance when
+    // there was something to show. A player who opens the lobby every half
+    // hour used to reset lastViewedAt on every visit, so `awayMs` never
+    // reached MIN_AWAY_MS and they could never receive a recap at all —
+    // the checkpoint starved the feature it exists for.
+    const hasSomethingToShow = Boolean(recap || (journal && journal.entries.length > 0))
 
-    return NextResponse.json({ recap, journal })
+    return NextResponse.json({
+      recap,
+      journal,
+      checkpoint: hasSomethingToShow ? now.toISOString() : null,
+    })
   } catch (error) {
     console.error('Get away-recap error:', error)
     return NextResponse.json({ error: 'Failed to get away recap' }, { status: 500 })
+  }
+}
+
+/**
+ * Acknowledge a recap: advance lastViewedAt to the checkpoint the matching
+ * GET returned. Idempotent and monotonic — replaying an old acknowledgement
+ * cannot move the checkpoint backwards and re-show an absence the player has
+ * already read.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getUser(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const campaignId = params.id
+    const membership = await getCampaignMembership(user.userId, campaignId)
+    if (!membership) {
+      return NextResponse.json({ error: 'Not a member of this campaign' }, { status: 403 })
+    }
+
+    const body = await request.json().catch(() => null)
+    const checkpoint = new Date(body?.checkpoint)
+    if (!body?.checkpoint || Number.isNaN(checkpoint.getTime())) {
+      return NextResponse.json({ error: 'A valid checkpoint is required' }, { status: 400 })
+    }
+
+    // Never past the present: a client clock running fast, or a crafted
+    // value, must not be able to mark future events as already seen.
+    const now = new Date()
+    if (checkpoint > now) {
+      return NextResponse.json({ error: 'Checkpoint is in the future' }, { status: 400 })
+    }
+
+    // Never backwards either. `updateMany` with the comparison in the
+    // WHERE rather than a read-then-write, so two lobby tabs acknowledging
+    // at once cannot interleave into the older value winning.
+    const { count } = await prisma.campaignMembership.updateMany({
+      where: {
+        id: membership.id,
+        OR: [{ lastViewedAt: null }, { lastViewedAt: { lt: checkpoint } }],
+      },
+      data: { lastViewedAt: checkpoint },
+    })
+
+    return NextResponse.json({ acknowledged: count > 0, lastViewedAt: checkpoint.toISOString() })
+  } catch (error) {
+    console.error('Acknowledge away-recap error:', error)
+    return NextResponse.json({ error: 'Failed to acknowledge away recap' }, { status: 500 })
   }
 }

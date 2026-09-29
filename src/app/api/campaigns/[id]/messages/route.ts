@@ -7,6 +7,7 @@ import PusherServer from '@/lib/realtime/pusher-server';
 import { detectMentions } from '@/lib/notifications/mentions';
 import { NotificationService } from '@/lib/notifications/notification-service';
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
+import { campaignChannel, userChannel } from '@/lib/realtime/channels'
 
 // GET /api/campaigns/[id]/messages - Get messages for campaign
 export async function GET(
@@ -228,11 +229,11 @@ export async function POST(
     if (pusher) {
       try {
         // Broadcast to campaign channel for all messages (including scene-specific ones)
-        await pusher.trigger(`campaign-${params.id}`, 'new-message', message)
+        await pusher.trigger(campaignChannel(params.id), 'new-message', message)
 
         // If it's a whisper, also send to the target user's channel
         if (type === 'WHISPER' && targetUserId) {
-          await pusher.trigger(`user-${targetUserId}`, 'new-whisper', message)
+          await pusher.trigger(userChannel(targetUserId), 'new-whisper', message)
         }
       } catch (pusherError) {
         console.error('Failed to broadcast message via Pusher:', pusherError)

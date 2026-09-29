@@ -58,6 +58,7 @@ import {
   buildQuestWikiSummary,
   buildItemWikiSummary,
 } from '@/lib/wiki/entitySummaries'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 /**
  * Resolve a scene using the AI GM
@@ -178,7 +179,7 @@ export async function resolveScene(campaignId: string, sceneId: string, forceRes
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolution-failed', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:resolution-failed', {
           sceneId,
           campaignId,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -210,7 +211,7 @@ async function performResolution(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolving', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:resolving', {
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,
@@ -539,7 +540,7 @@ async function performResolution(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:resolved', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:resolved', {
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,

@@ -12,10 +12,19 @@ import { prisma } from '@/lib/prisma'
 import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/lib/rateLimit'
 import { handleRouteErrorWithDetails } from '@/lib/api/errors'
 
-// This route only validates and enqueues — free, like every other
-// mid-scene resolution. Billing happens exactly once, when the scene
-// actually ends (see end-scene/route.ts). The long AI pipeline runs in
-// /api/internal/resolve-job (maxDuration 300).
+// This route validates, checks the payers can cover the work, and
+// enqueues. The CHARGE still happens exactly once, when the scene actually
+// ends (see end-scene/route.ts) — but the check does not wait that long.
+//
+// #487: it used to enqueue unconditionally, described as "free". Free to
+// the player, not to the deployment: each enqueue runs the full pipeline
+// in /api/internal/resolve-job, spending real money, and a zero-balance
+// player could repeat that indefinitely because the only refusal lived at
+// scene end. The preflight below is the same one end-scene runs; running
+// it here too means an unaffordable scene is refused before the spend
+// rather than after it.
+//
+// The long pipeline runs in /api/internal/resolve-job (maxDuration 300).
 export const maxDuration = 60
 
 export async function POST(
@@ -116,14 +125,26 @@ export async function POST(
       `📝 Scene ${currentScene.sceneNumber} has ${sceneActions.length} action(s)`
     )
 
-    // 3. Enqueue the resolution — the AI GM + world turn run behind this
+    // 3. Balance preflight before the spend (#487). Dynamic import to
+    // match end-scene's call site, keeping the billing module off the cold
+    // start of routes that never reach it.
+    const { preflightSceneBilling } = await import('@/lib/game/resolutionBilling')
+    const preflight = await preflightSceneBilling(currentScene.id)
+    if (!preflight.ok) {
+      return NextResponse.json<ErrorResponse>(
+        { error: preflight.error || 'Insufficient balance', details: preflight.details },
+        { status: 402 }
+      )
+    }
+
+    // 4. Enqueue the resolution — the GM + world turn run behind this
     // one call, in the internal worker route's own invocation. The UI
     // follows the scene:resolving / scene:resolved Pusher events; players
     // were already watching those, not this response body.
     console.log('🤖 Enqueueing scene resolution...')
     const { jobId, deduped } = await enqueueSceneResolution(campaignId, currentScene.id)
 
-    // 4. Return accepted — resolution completes asynchronously
+    // 5. Return accepted — resolution completes asynchronously
     return NextResponse.json({
       success: true,
       message: deduped

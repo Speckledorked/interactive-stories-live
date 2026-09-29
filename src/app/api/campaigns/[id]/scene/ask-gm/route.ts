@@ -12,6 +12,7 @@ import { AI_ACTION_LIMIT, checkRateLimit, rateLimitExceededResponse } from '@/li
 import { moderatePlayerText } from '@/lib/ai/moderation'
 import { generateGmAnswer, MAX_QUESTION_CHARS } from '@/lib/ai/askGm'
 import { handleRouteError } from '@/lib/api/errors'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export const maxDuration = 30
 
@@ -107,7 +108,7 @@ export async function POST(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'gm:clarification', {
+        await pusher.trigger(campaignChannel(campaignId), 'gm:clarification', {
           id: clarification.id,
           sceneId,
           characterId: clarification.characterId,

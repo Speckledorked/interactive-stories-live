@@ -28,6 +28,7 @@ export type CheckKey =
   | 'clock.sourceFactionId.active'
   | 'faction.leadership.exactlyOneLivingLeader'
   | 'faction.leadership.atMostOneLivingLeader'
+  | 'faction.leaderCharacterId.alive'
   | 'npc.name.unique'
   | 'faction.name.unique'
   | 'quest.name.unique'

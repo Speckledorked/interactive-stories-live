@@ -7,6 +7,7 @@
 import { prisma } from '@/lib/prisma';
 import { XCardTrigger, ReportStatus, ReportSeverity } from '@prisma/client';
 import PusherServer from '@/lib/realtime/pusher-server';
+import { campaignChannel } from '@/lib/realtime/channels';
 
 export interface SafetySettings {
   xCardEnabled?: boolean;
@@ -402,7 +403,7 @@ export class SafetyService {
     try {
       const pusher = PusherServer();
       if (pusher) {
-        await pusher.trigger(`campaign-${scene.campaignId}`, 'scene:paused', {
+        await pusher.trigger(campaignChannel(scene.campaignId), 'scene:paused', {
           sceneId,
           campaignId: scene.campaignId,
           reason,
@@ -430,7 +431,7 @@ export class SafetyService {
     try {
       const pusher = PusherServer();
       if (pusher) {
-        await pusher.trigger(`campaign-${scene.campaignId}`, 'scene:resumed', {
+        await pusher.trigger(campaignChannel(scene.campaignId), 'scene:resumed', {
           sceneId,
           campaignId: scene.campaignId,
         });

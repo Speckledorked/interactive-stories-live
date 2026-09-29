@@ -140,3 +140,75 @@ export const repairFactionLeadershipConflict: RepairFn = (violation): Repair | n
     write: { model: 'nPC', id: violation.entityId, data: { factionRole: 'MEMBER' } },
   }
 }
+
+// #476: the precondition both checks above silently depend on.
+//
+// Faction.leaderCharacterId is the "a player leads this" marker.
+// decideSuccession returns null the instant it is set, and
+// detectLeadershipConflict counts it as a living leader — so a faction
+// whose PC leader has DIED reads, to every path in the system, as a
+// faction that already has a leader. Succession is not merely delayed; it
+// is suppressed permanently and invisibly, by the very field the leadership
+// invariant is keyed on. Deleting the character was always safe
+// (onDelete: SetNull). Death was the hole.
+//
+// The death path now clears this itself (worldUpdaters/characters.ts), so
+// this check is the safety net and the repair for rows already in that
+// state — the same relationship factionHasOneLivingLeader has to
+// leadershipTick. It also covers the FK pointing at a character that is
+// gone from the snapshot entirely, which the SetNull constraint should
+// prevent but which costs nothing to notice.
+//
+// Registered before the two checks above, and given the same top severity,
+// because clearing the stale FK is what lets either of them see anything
+// at all.
+export const factionLeaderCharacterIsAlive: IntegrityCheck = {
+  key: 'faction.leaderCharacterId.alive' satisfies CheckKey,
+  description: 'A Faction.leaderCharacterId should point at a living character',
+  run(snapshot: IntegritySnapshot): Violation[] {
+    const violations: Violation[] = []
+    for (const faction of snapshot.factions) {
+      if (!faction.isActive) continue
+      if (!faction.leaderCharacterId) continue
+
+      const leader = snapshot.characters.find((c) => c.id === faction.leaderCharacterId)
+      if (leader && leader.isAlive) continue
+
+      violations.push({
+        checkKey: 'faction.leaderCharacterId.alive',
+        entityType: 'FACTION',
+        entityId: faction.id,
+        entityName: faction.name,
+        description: leader
+          ? `${faction.name} is still led by ${leader.name}, who is dead — succession cannot begin until the leader of record is released`
+          : `${faction.name} names a leader character that no longer exists`,
+      })
+    }
+    return violations
+  },
+}
+
+export const repairFactionLeaderCharacterAlive: RepairFn = (violation, snapshot): Repair | null => {
+  const faction = snapshot.factions.find((f) => f.id === violation.entityId)
+  if (!faction || !faction.leaderCharacterId) return null
+
+  const leader = snapshot.characters.find((c) => c.id === faction.leaderCharacterId)
+
+  return {
+    violation,
+    // Reported on the faction, unlike the succession repair next door: the
+    // thing that changes here IS the faction's own column, and no NPC has
+    // been promoted yet. That happens on the following pass, once this
+    // clear has made the vacancy visible.
+    entityType: 'FACTION',
+    entityId: faction.id,
+    entityName: faction.name,
+    field: 'leaderCharacterId',
+    previousValue: faction.leaderCharacterId,
+    newValue: 'none',
+    description: leader
+      ? `${leader.name} is dead; ${faction.name} released them as leader of record so a successor can be chosen`
+      : `${faction.name} released a leader of record that no longer exists`,
+    write: { model: 'faction', id: faction.id, data: { leaderCharacterId: null } },
+  }
+}

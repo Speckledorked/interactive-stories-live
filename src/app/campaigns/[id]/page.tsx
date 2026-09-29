@@ -11,7 +11,6 @@ import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from 
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
-import NotificationPanel from '@/components/notifications/NotificationPanel'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
 import InviteModal from '@/components/campaigns/InviteModal'
 import { Home, Scroll, MessageSquare, StickyNote, Map as MapIcon } from 'lucide-react'
@@ -61,14 +60,19 @@ export default function CampaignLobbyPage() {
   const [data, setData] = useState<CampaignData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showCreateCharacter, setShowCreateCharacter] = useState(false)
+  // #495: the creation form lived behind lobby state with no URL, so
+  // nothing elsewhere in the app could send anyone to it — which is why the
+  // story page had no CTA to offer a player with no character. Honouring a
+  // param makes it a real destination.
+  const [showCreateCharacter, setShowCreateCharacter] = useState(
+    searchParams.get('create') === 'character'
+  )
   const [activeTab, setActiveTabState] = useState<LobbyTab>(initialTab)
 
   const setActiveTab = (tab: LobbyTab) => {
     setActiveTabState(tab)
     router.replace(`/campaigns/${campaignId}${tab === 'overview' ? '' : `?tab=${tab}`}`, { scroll: false })
   }
-  const [showNotifications, setShowNotifications] = useState(false)
   const [deletingCharacterId, setDeletingCharacterId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState('')
   const [maps, setMaps] = useState<any[]>([])
@@ -119,6 +123,25 @@ export default function CampaignLobbyPage() {
       .then(json => {
         setAwayRecap(json?.recap ?? null)
         setAwayJournal(json?.journal ?? null)
+
+        // #505: the GET no longer advances the checkpoint — it is a safe
+        // method again. Acknowledging is a separate POST, sent only once
+        // the recap is actually in state and about to render, so a
+        // response lost in flight or a tab closed mid-load no longer
+        // consumes an absence the player never saw.
+        //
+        // The server returns a null checkpoint when there was nothing to
+        // show, which is #396's rule: an empty recap must not reset the
+        // window a returning player is waiting to accumulate.
+        if (!json?.checkpoint) return
+        void authenticatedFetch(`/api/campaigns/${campaignId}/away-recap`, {
+          method: 'POST',
+          body: JSON.stringify({ checkpoint: json.checkpoint }),
+        }).catch(() => {
+          // Best effort. A failed acknowledgement leaves the checkpoint
+          // where it was, so the next visit shows the same recap again —
+          // the safe direction to fail in.
+        })
       })
       .catch(() => {})
   }, [campaignId])
@@ -871,15 +894,14 @@ export default function CampaignLobbyPage() {
 
       <TavernNav campaignId={campaignId} />
 
-      {/* Notification Panel - Phase 8/9 Communication */}
-      {data && (
-        <NotificationPanel
-          userId={getUser()?.id || ''}
-          campaignId={campaignId}
-          isOpen={showNotifications}
-          onClose={() => setShowNotifications(false)}
-        />
-      )}
+      {/* #496: a second NotificationPanel used to be mounted here with its
+          own `showNotifications` state that nothing ever set true. It could
+          not be opened from anywhere, but being mounted it still ran its
+          effects — a Pusher subscription and a notifications fetch on every
+          lobby visit, for a panel no one could see.
+
+          The reachable one lives in TavernHeader (the bell), which this page
+          already renders, so this was a duplicate as well as a dead one. */}
 
       {/* Character Creation Modal */}
       {showCreateCharacter && (

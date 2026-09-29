@@ -32,7 +32,7 @@ export async function loadIntegritySnapshot(
     }),
     db.character.findMany({
       where: { campaignId },
-      select: { id: true, name: true, relationships: true, resources: true },
+      select: { id: true, name: true, isAlive: true, relationships: true, resources: true },
     }),
     db.clock.findMany({
       where: { campaignId },

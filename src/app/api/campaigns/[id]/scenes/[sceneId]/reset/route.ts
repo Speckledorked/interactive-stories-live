@@ -8,6 +8,7 @@ import PusherServer from '@/lib/realtime/pusher-server'
 import { SceneStatus, Prisma } from '@prisma/client'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export async function POST(
   request: NextRequest,
@@ -77,7 +78,7 @@ export async function POST(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:reset', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:reset', {
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,

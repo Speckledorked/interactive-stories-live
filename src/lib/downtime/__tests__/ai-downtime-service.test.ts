@@ -696,6 +696,9 @@ describe('advanceDynamicDowntime — outcome-generation-failure retry (#305)', (
     vi.clearAllMocks()
     findUniqueMock.mockResolvedValue({ isAlive: true })
     activityFindManyMock.mockResolvedValueOnce([]) // no ACTIVE activities this call
+    // #474: the retry pass now claims each row before generating. Winning
+    // is the default so the #305 tests below read as they always did.
+    activityUpdateManyMock.mockResolvedValue({ count: 1 })
   })
 
   it('retries a COMPLETED activity carrying a recorded failure, and clears it on success', async () => {
@@ -719,5 +722,83 @@ describe('advanceDynamicDowntime — outcome-generation-failure retry (#305)', (
 
     expect(generateSpy).not.toHaveBeenCalled()
     expect(results).toEqual([])
+  })
+})
+
+// #474: the retry path had no race guard at all — the same defect class
+// #304 fixed on the completion path, still open here. A plain findMany
+// followed by a for-loop is not a claim: two concurrent advances (a
+// double-click, two open tabs, a client retry) could both select the same
+// COMPLETED row and both run reward generation, double-applying its gold,
+// items and skill XP. Unlike most races this one is invisible afterwards —
+// a player with twice the gold looks exactly like a player who earned it.
+describe('advanceDynamicDowntime — retry double-claim race (#474)', () => {
+  function completedActivity(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'activity2',
+      characterId: 'char1',
+      summary: 'Commission a masterwork blade',
+      description: 'Commission a masterwork blade',
+      currentDay: 3,
+      estimatedDays: 3,
+      linkedQuestId: null,
+      outcomes: { aiInterpretation: {} },
+      events: [],
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    findUniqueMock.mockResolvedValue({ isAlive: true })
+    activityFindManyMock.mockResolvedValueOnce([]) // no ACTIVE activities
+  })
+
+  it('claims each row against the flag it selected on, before generating', async () => {
+    activityFindManyMock.mockResolvedValueOnce([completedActivity()])
+    activityUpdateManyMock.mockResolvedValue({ count: 1 })
+    vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes')
+      .mockResolvedValue({ primaryOutcome: 'Recovered', narrative: 'Recovered' } as any)
+
+    await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    // Scoped to outcomeGenerationFailedAt still being set — the same
+    // predicate the findMany used, which is what makes clearing it a claim
+    // rather than just a cleanup.
+    expect(activityUpdateManyMock).toHaveBeenCalledWith({
+      where: { id: 'activity2', outcomeGenerationFailedAt: { not: null } },
+      data: { outcomeGenerationFailedAt: null },
+    })
+  })
+
+  it('skips generation entirely when another call won the claim', async () => {
+    activityFindManyMock.mockResolvedValueOnce([completedActivity()])
+    activityUpdateManyMock.mockResolvedValue({ count: 0 }) // lost the race
+    const generateSpy = vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes')
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(generateSpy).not.toHaveBeenCalled()
+    // ...and reports nothing, rather than reporting a completion whose
+    // rewards this call never applied.
+    expect(results).toEqual([])
+  })
+
+  it('claims each row independently, so one loser does not block the rest', async () => {
+    activityFindManyMock.mockResolvedValueOnce([
+      completedActivity({ id: 'lost' }),
+      completedActivity({ id: 'won' }),
+    ])
+    activityUpdateManyMock
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 })
+    const generateSpy = vi.spyOn(AIDrivenDowntimeService, 'generateDynamicOutcomes')
+      .mockResolvedValue({ primaryOutcome: 'Recovered', narrative: 'Recovered' } as any)
+
+    const results = await AIDrivenDowntimeService.advanceDynamicDowntime('char1', 1)
+
+    expect(generateSpy).toHaveBeenCalledTimes(1)
+    expect(generateSpy).toHaveBeenCalledWith('won', expect.anything(), expect.anything())
+    expect(results).toHaveLength(1)
   })
 })

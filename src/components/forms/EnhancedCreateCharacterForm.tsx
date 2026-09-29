@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
 import { parseAdvancementTrack } from '@/lib/game/advancementTrack'
+import { CONSEQUENCE_LABELS } from '@/lib/game/consequenceLabels'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
@@ -1167,11 +1168,17 @@ export default function EnhancedCreateCharacterForm({
               </div>
             </div>
 
-            {/* Debts */}
+            {/* Debts. #475: this field is where freeform debts come FROM,
+                so it is where the expectation is set. What a player types
+                here is backstory — it never becomes a tracked obligation
+                that can be settled, and telling them that at the point of
+                writing is cheaper than surprising them later. */}
             <div className="border-t border-myth-border pt-6">
-              <h3 className="text-lg font-medium text-myth-ink mb-2">Debts Owed</h3>
+              <h3 className="text-lg font-medium text-myth-ink mb-2">{CONSEQUENCE_LABELS.debt.label}s</h3>
               <p className="text-xs text-myth-ink-faint mb-4">
-                What does your character owe to others? Money, favors, life debts?
+                What does your character owe to others? Money, favors, life debts? These are
+                backstory notes — obligations your character takes on in play are tracked
+                separately.
               </p>
 
               {formData.consequences.debts.length > 0 && (

@@ -1160,6 +1160,30 @@ export async function applyCharacterChanges(
         data: updateData
       })
 
+      // #476: a dead PC must stop being a faction's leader of record.
+      //
+      // Faction.leaderCharacterId is the "a player leads this" marker, and
+      // every succession path reads it as "there is a leader, nothing to
+      // do" — leadershipTick's decideSuccession returns null the instant it
+      // is set, and detectLeadershipConflict treats it as a living leader.
+      // Nothing cleared it on death, so a faction whose PC leader died was
+      // left permanently unable to get a successor, and permanently
+      // invisible to the check built to catch exactly that. The deletion
+      // path was always safe (onDelete: SetNull); death was the hole.
+      //
+      // updateMany rather than update: the FK has no uniqueness constraint,
+      // so "however many factions name this character" is the honest query,
+      // and a character who leads none is a no-op rather than a throw.
+      if (updateData.isAlive === false) {
+        const { count } = await tx.faction.updateMany({
+          where: { campaignId, leaderCharacterId: character.id },
+          data: { leaderCharacterId: null },
+        })
+        if (count > 0) {
+          console.log(`  🏛️ ${character.name} died; released leadership of ${count} faction(s)`)
+        }
+      }
+
       console.log(`  🦸 Updated character: ${character.name}`)
     }
   }

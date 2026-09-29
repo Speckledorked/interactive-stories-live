@@ -12,6 +12,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { HEADER_OFFSET_SUBROW } from '@/components/tavern/headerOffset'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export default function CharacterPage() {
   const router = useRouter()
@@ -46,7 +47,7 @@ export default function CharacterPage() {
   useEffect(() => {
     if (!pusherClient) return
 
-    const channel = pusherClient.subscribe(`campaign-${campaignId}`)
+    const channel = pusherClient.subscribe(campaignChannel(campaignId))
 
     channel.bind('scene:resolved', () => {
       loadData()
@@ -54,7 +55,7 @@ export default function CharacterPage() {
 
     return () => {
       if (pusherClient) {
-        pusherClient.unsubscribe(`campaign-${campaignId}`)
+        pusherClient.unsubscribe(campaignChannel(campaignId))
       }
     }
   }, [campaignId])
@@ -201,7 +202,7 @@ export default function CharacterPage() {
       />
 
       <main className={`max-w-6xl mx-auto px-4 ${HEADER_OFFSET_SUBROW} pb-28`}>
-        <p className="mb-4 text-sm text-myth-ink-faint">{campaign?.campaign?.name}</p>
+        <p className="mb-4 text-sm text-myth-ink-faint">{campaign?.campaign?.title}</p>
 
         {/* Character Sheet (Downtime is one of its tabs) */}
         <CharacterSheetDisplay

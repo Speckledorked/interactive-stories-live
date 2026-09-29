@@ -15,6 +15,7 @@ import { ErrorResponse } from '@/types/api'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
 import { handleRouteError } from '@/lib/api/errors'
 import PusherServer from '@/lib/realtime/pusher-server'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export async function DELETE(
   request: NextRequest,
@@ -41,7 +42,7 @@ export async function DELETE(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:deleted', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:deleted', {
           sceneId,
           sceneNumber: scene.sceneNumber,
           campaignId,

@@ -5,14 +5,29 @@
 // (balance.retrieve, no side effects, no charge). Never echoes secret
 // values. Rate-limited.
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { getUser } from '@/lib/auth'
+import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 
 export const maxDuration = 30
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const rateLimit = await checkRateLimit('anonymous', 'stripe-health', 4, 60)
+// Platform-admin only, for the same reason as /api/ai-health (#509): the
+// payload is a live inventory of which payment secrets this deployment is
+// missing. "webhookSecretPresent: false" told an anonymous caller that
+// completed payments are not crediting balances — operational intelligence
+// nobody outside the deploy should be handed.
+export async function GET(request: NextRequest) {
+  const user = await getUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  if (!isPlatformAdminEmail(user.email)) {
+    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  }
+
+  const rateLimit = await checkRateLimit(user.userId, 'stripe-health', 4, 60)
   if (!rateLimit.allowed) {
     return NextResponse.json({ error: 'Too many health checks — try again in a minute.' }, { status: 429 })
   }

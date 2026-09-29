@@ -15,6 +15,7 @@ import type { Scene } from '@prisma/client'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { recordEvent } from '@/lib/analytics/events'
 import { canAct, parseHarmState, HarmLevel } from './harm'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export interface SceneParticipants {
   characterIds: string[]
@@ -113,7 +114,7 @@ export async function submitPlayerAction(
     const pusher = PusherServer()
     if (pusher) {
       await pusher.trigger(
-        `campaign-${campaignId}`,
+        campaignChannel(campaignId),
         'action:created',
         {
           actionId: action.id,

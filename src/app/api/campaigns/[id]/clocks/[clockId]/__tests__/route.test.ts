@@ -11,7 +11,7 @@ import { NextRequest } from 'next/server'
 vi.mock('@/lib/auth', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/db/campaignAccess', () => ({ requireCampaignAdmin: vi.fn() }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { clock: { update: vi.fn(), findUnique: vi.fn() } },
+  prisma: { clock: { update: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() } },
 }))
 vi.mock('@/lib/realtime/pusher-server', () => ({ PusherServer: vi.fn() }))
 
@@ -44,6 +44,10 @@ beforeEach(() => {
   ;(getUser as any).mockResolvedValue({ userId: 'admin1' })
   ;(requireCampaignAdmin as any).mockResolvedValue({ membership: { role: 'ADMIN' } })
   ;(PusherServer as any).mockReturnValue(null)
+  // #480: PATCH now reads the current ticks before writing, so the
+  // resulting row can be checked against the invariant the tick engine
+  // assumes. Every PATCH test needs a row to exist.
+  db.clock.findFirst.mockResolvedValue({ currentTicks: 2, maxTicks: 6 })
 })
 
 describe('PATCH', () => {
@@ -62,7 +66,7 @@ describe('PATCH', () => {
     const response = await PATCH(patchRequest({ name: 'Doom Clock' }), { params: { id: 'camp1', clockId: 'clock1' } })
 
     expect(response.status).toBe(200)
-    expect(trigger).toHaveBeenCalledWith('campaign-camp1', 'clock:updated', expect.objectContaining({ clockId: 'clock1' }))
+    expect(trigger).toHaveBeenCalledWith('private-campaign-camp1', 'clock:updated', expect.objectContaining({ clockId: 'clock1' }))
   })
 
   it('does not broadcast an update for a hidden clock', async () => {
@@ -148,5 +152,51 @@ describe('unauthenticated access (#426)', () => {
     const response = await PATCH(patchRequest({ name: 'New' }), { params: { id: 'camp1', clockId: 'clock1' } })
 
     expect(response.status).toBe(401)
+  })
+})
+
+describe('PATCH tick validation (#480)', () => {
+  // Each of these used to be written straight through. See
+  // lib/game/clockInvariant.ts for what the tick engine does with them.
+  const params = { params: { id: 'camp1', clockId: 'clock1' } }
+
+  it('404s when the clock does not exist', async () => {
+    db.clock.findFirst.mockResolvedValue(null)
+    const response = await PATCH(patchRequest({ name: 'New' }), params)
+    expect(response.status).toBe(404)
+    expect(db.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects fractional ticks', async () => {
+    const response = await PATCH(patchRequest({ currentTicks: 1.5 }), params)
+    expect(response.status).toBe(400)
+    expect(db.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects negative ticks', async () => {
+    const response = await PATCH(patchRequest({ currentTicks: -1 }), params)
+    expect(response.status).toBe(400)
+    expect(db.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects maxTicks below 1', async () => {
+    const response = await PATCH(patchRequest({ maxTicks: 0 }), params)
+    expect(response.status).toBe(400)
+    expect(db.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('rejects currentTicks above the STORED maxTicks when only current is sent', async () => {
+    // The case a payload-only check misses: 9 looks fine on its own.
+    const response = await PATCH(patchRequest({ currentTicks: 9 }), params)
+    expect(response.status).toBe(400)
+    expect(db.clock.update).not.toHaveBeenCalled()
+  })
+
+  it('leaves tick columns untouched when neither field is sent', async () => {
+    db.clock.update.mockResolvedValue({ id: 'clock1', name: 'X', currentTicks: 2, maxTicks: 6, isHidden: true })
+    await PATCH(patchRequest({ name: 'X' }), params)
+    const data = db.clock.update.mock.calls[0][0].data
+    expect('currentTicks' in data).toBe(false)
+    expect('maxTicks' in data).toBe(false)
   })
 })

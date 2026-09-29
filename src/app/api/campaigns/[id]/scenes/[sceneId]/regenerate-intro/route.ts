@@ -16,6 +16,7 @@ import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import PusherServer from '@/lib/realtime/pusher-server'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { handleRouteErrorWithDetails } from '@/lib/api/errors'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export async function POST(
   request: NextRequest,
@@ -87,7 +88,7 @@ export async function POST(
     try {
       const pusher = PusherServer()
       if (pusher) {
-        await pusher.trigger(`campaign-${campaignId}`, 'scene:regenerated', {
+        await pusher.trigger(campaignChannel(campaignId), 'scene:regenerated', {
           sceneId,
           campaignId,
           sceneNumber: scene.sceneNumber

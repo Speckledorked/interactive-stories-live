@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Tabs } from '@/components/ui/tabs'
+import { campaignChannel, userChannel } from '@/lib/realtime/channels'
+import { useRealtimeReconnect } from '@/hooks/useRealtimeReconnect'
 
 interface ChatPanelProps {
   campaignId: string;
@@ -54,6 +56,12 @@ export default function ChatPanel({
     fetchCampaignMembers();
   }, [campaignId, sceneId]);
 
+  // #502: chat after the initial load is entirely event-driven, and Pusher
+  // events published while disconnected are gone. So a dropped connection
+  // did not degrade this panel, it froze it — indistinguishable from a
+  // quiet table, with nothing prompting a reload. Re-read on recovery.
+  useRealtimeReconnect(() => { fetchMessages(); });
+
   // Set up real-time subscriptions
   useEffect(() => {
     // Check if Pusher is configured before attempting to use it
@@ -63,16 +71,16 @@ export default function ChatPanel({
     }
 
     try {
-      const campaignChannel = subscribeToCampaignMessages(campaignId);
+      const campaignSub = subscribeToCampaignMessages(campaignId);
       const whisperChannel = subscribeToUserWhispers(currentUserId);
 
-      if (!campaignChannel || !whisperChannel) {
+      if (!campaignSub || !whisperChannel) {
         console.warn('Could not subscribe to Pusher channels. Real-time chat features will be disabled.');
         return;
       }
 
       // Listen for new messages
-      campaignChannel.bind('new-message', (message: RealtimeMessage) => {
+      campaignSub.bind('new-message', (message: RealtimeMessage) => {
         setMessages(prev => [...prev, message]);
       });
 
@@ -82,7 +90,7 @@ export default function ChatPanel({
       });
 
       // Listen for typing indicators
-      campaignChannel.bind('user-typing', ({ userId, userName, isTyping }: any) => {
+      campaignSub.bind('user-typing', ({ userId, userName, isTyping }: any) => {
         if (userId !== currentUserId) {
           setTypingUsers(prev => {
             if (isTyping) {
@@ -95,15 +103,15 @@ export default function ChatPanel({
       });
 
       return () => {
-        campaignChannel.unbind_all();
+        campaignSub.unbind_all();
         whisperChannel.unbind_all();
         // #413: goes through the helper rather than re-doing the
         // getPusherClient dance inline. unsubscribeFromChannel had zero
         // callers while this hand-rolled equivalent sat right here — an
         // uncalled cleanup function usually means a leak, and the honest
         // answer here was "no leak, just two ways to do one thing".
-        unsubscribeFromChannel(`campaign-${campaignId}`);
-        unsubscribeFromChannel(`user-${currentUserId}`);
+        unsubscribeFromChannel(campaignChannel(campaignId));
+        unsubscribeFromChannel(userChannel(currentUserId));
       };
     } catch (error) {
       console.error('Failed to initialize Pusher:', error);

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { PusherServer } from '@/lib/realtime/pusher-server'
 import { requireCampaignAdmin } from '@/lib/db/campaignAccess'
+import { validateClockTicks } from '@/lib/game/clockInvariant'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 export async function PATCH(
   request: NextRequest,
@@ -22,6 +24,26 @@ export async function PATCH(
     const adminCheck = await requireCampaignAdmin(user.userId, campaignId, 'Only campaign admins can update clocks')
     if ('response' in adminCheck) return adminCheck.response
 
+    // #480: ticks used to be written straight from the body. The tick
+    // engine reads `currentTicks < maxTicks` as "advanceable" and
+    // `currentTicks >= maxTicks` as "just finished", so a clock outside
+    // `0 <= current <= max` (max >= 1) is one neither reading describes —
+    // reachable here by a typo in a number field, and silent afterwards.
+    // See lib/game/clockInvariant.ts, which is where the tick path's
+    // assumption is now written down.
+    const existing = await prisma.clock.findFirst({
+      where: { id: clockId, campaignId },
+      select: { currentTicks: true, maxTicks: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Clock not found' }, { status: 404 })
+    }
+
+    const ticks = validateClockTicks(body, existing)
+    if (!ticks.ok) {
+      return NextResponse.json({ error: ticks.error }, { status: 400 })
+    }
+
     // Update Clock
     const clock = await prisma.clock.update({
       where: {
@@ -31,8 +53,10 @@ export async function PATCH(
       data: {
         name: body.name,
         description: body.description,
-        maxTicks: body.maxTicks,
-        currentTicks: body.currentTicks,
+        // Spread rather than assigned: an absent field must stay absent so
+        // Prisma leaves the column alone, and `maxTicks: undefined` after
+        // validation would be indistinguishable from "not sent".
+        ...ticks.value,
         category: body.category,
         isHidden: body.isHidden,
         consequence: body.consequence,
@@ -48,7 +72,7 @@ export async function PATCH(
         const pusher = PusherServer()
         if (pusher) {
           await pusher.trigger(
-            `campaign-${campaignId}`,
+            campaignChannel(campaignId),
             'clock:updated',
             {
               clockId: clock.id,
@@ -126,7 +150,7 @@ export async function POST(
         const pusher = PusherServer()
         if (pusher) {
           await pusher.trigger(
-            `campaign-${campaignId}`,
+            campaignChannel(campaignId),
             'clock:ticked',
             {
               clockId: clock.id,

@@ -18,6 +18,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { Backpack, BarChart3, Circle, ClipboardList, Coins, CreditCard, DollarSign, HeartHandshake, JapaneseYen, Moon, Sparkles, Sprout, Star, Target, TrendingUp } from 'lucide-react'
 import { type IconComponent } from '@/lib/ui/icons'
 import { normalizeConsequenceList } from '@/lib/game/consequenceRecords'
+import { CONSEQUENCE_LABELS } from '@/lib/game/consequenceLabels'
 import { parseAdvancementTrack, tierProgress, slotProgress } from '@/lib/game/advancementTrack'
 
 interface CharacterSheetDisplayProps {
@@ -906,9 +907,18 @@ export default function CharacterSheetDisplay({
               </Card>
             )}
 
+            {/* #475: this card used to be labelled "Debts", on the same
+                sheet as the "Obligations" card above — which IS the tracked
+                Debt economy. Two cards, one word, and the one that could
+                never be marked settled was the one that looked official.
+                Copy comes from lib/game/consequenceLabels.ts so this and
+                the snapshot modal cannot drift again. */}
             {allConsequences.filter(c => c.type === 'debt').length > 0 && (
               <Card>
-                <CardLabel>Debts</CardLabel>
+                <CardLabel>{CONSEQUENCE_LABELS.debt.heading}</CardLabel>
+                {CONSEQUENCE_LABELS.debt.note && (
+                  <p className="mb-3 text-xs text-myth-ink-faint">{CONSEQUENCE_LABELS.debt.note}</p>
+                )}
                 <div className="space-y-3">
                   {allConsequences
                     .filter(c => c.type === 'debt')

@@ -17,6 +17,7 @@ import { getPusherClient } from '@/lib/realtime/pusher-client';
 import { authenticatedFetch } from '@/lib/clientAuth';
 import { Button } from '@/components/ui/button';
 import { Check, Hourglass, Pause } from 'lucide-react'
+import { campaignChannel } from '@/lib/realtime/channels'
 
 interface TurnInfo {
   currentPlayer: {
@@ -101,7 +102,7 @@ export default function TurnTracker({
       return;
     }
 
-    const channel = pusher.subscribe(`campaign-${campaignId}`);
+    const channel = pusher.subscribe(campaignChannel(campaignId));
 
     channel.bind('turn-update', (data: any) => {
       setTurnInfo(data);
@@ -118,7 +119,7 @@ export default function TurnTracker({
   const cleanup = () => {
     const pusher = getPusherClient();
     if (!pusher) return;
-    pusher.unsubscribe(`campaign-${campaignId}`);
+    pusher.unsubscribe(campaignChannel(campaignId));
   };
 
   const updateTimeRemaining = () => {

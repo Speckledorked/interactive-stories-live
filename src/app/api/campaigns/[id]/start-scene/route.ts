@@ -95,7 +95,24 @@ export async function POST(
       }
     }
 
-    // 3. Create new scene (this calls AI to generate intro)
+    // 3. Balance preflight, BEFORE any generation (#487).
+    //
+    // Billing hooks used to exist only in end-scene, so a player at zero
+    // balance could start scenes and run mid-scene exchanges indefinitely;
+    // every one of them spent real money, and the refusal arrived only at
+    // scene end. Dynamic import to match end-scene's own call site, which
+    // keeps the billing module off the cold-start path of routes that
+    // never reach it.
+    const { preflightSceneStart } = await import('@/lib/game/resolutionBilling')
+    const preflight = await preflightSceneStart(characterIds, user.userId)
+    if (!preflight.ok) {
+      return NextResponse.json(
+        { error: preflight.error || 'Insufficient balance', details: preflight.details },
+        { status: 402 }
+      )
+    }
+
+    // 4. Create new scene (this generates the intro)
     console.log('🤖 Generating new scene...')
     const newScene = await createNewScene(campaignId, characterIds)
 

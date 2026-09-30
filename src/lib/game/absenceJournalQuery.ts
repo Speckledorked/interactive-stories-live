@@ -18,6 +18,27 @@
 // most easily got wrong (see the per-TYPE reasoning below), and this audit
 // has already found several shared-invariant-with-voluntary-adoption bugs.
 
+// #510 — THIS QUERY IS WHY NO WorldEvent ROW IS "WRITE-ONLY".
+//
+// An audit listed four insignificant event rows (an NPC's drifted
+// disposition, a location's population shift, a contest quietly settling,
+// a default-cascade wake tag) as write-only noise safe to stop emitting,
+// having checked the handlers and the digest. Both of those do filter: the
+// digest takes only significant + MAJOR rows, and every tick-side reader
+// filters by `type` or by `significant`.
+//
+// The scan below filters by NEITHER. It takes every row in the window for
+// any entity type that maps to a journal category, which is most of them,
+// and buildAbsenceJournal's first pass then spends one of its slots on the
+// best row in EACH category present — so an "insignificant" row can be the
+// only thing representing its category and go straight in front of a
+// player. The aggregate underneath counts them too, and that count is the
+// "while you were away" total the recap shows.
+//
+// So: check this query before concluding a change is unread. Three of those
+// four rows reach players through here; the fourth (FACTION_DEFAULT) is a
+// deliberate negative discriminator — see factionDefaultDiscriminator.test.ts.
+
 import { prisma } from '@/lib/prisma'
 import { buildAbsenceJournal, MAX_JOURNAL_ENTRIES, type AbsenceJournal } from './absenceJournal'
 import { DISCOVERY_GATED_ENTITY_TYPES } from '@/lib/notifications/world-digest'

@@ -171,6 +171,32 @@ import type { SimTurn } from './turnClock'
 // cascade created this turn starts decaying next turn, like every other
 // wake.
 //
+// #510 — TWO ONE-TICK LAGS THAT ARE LOAD-BEARING, NOT OVERSIGHTS.
+//
+// An audit flagged both as ordering defects. Both are consequences of the
+// dependencies above, and reordering to close either one breaks a
+// dependency that orchestration.test.ts pins for a stated reason.
+//
+// 1. tickNpcDisposition reads faction events BEFORE tickWars writes this
+//    turn's war attrition, so a faction bled into the LOW resources band by
+//    the fighting is seen a turn later. It cannot move after tickWars:
+//    tickFactions' collapse-defection split and tickFactionLeadership's
+//    succession scoring both read the freshly-drifted disposition the same
+//    turn it changes, and tickWars must itself run after both so momentum
+//    reads post-drift military. disposition < factions < leadership < wars
+//    is forced, and the lag falls out of it. A war's effect on how people
+//    feel about their faction arriving next turn is, in any case, the
+//    correct fiction — news travels.
+//
+// 2. tickFactionRelationships pins a warring pair as RIVAL by querying
+//    ESCALATING wars, so a war declared by tickWars this turn is pinned
+//    next turn. Same forced chain: relationships must precede factions so
+//    goal reassessment reads this turn's rivalries. The lag is also inert
+//    — a war can only ignite between a pair already on record as RIVAL,
+//    and nothing re-evaluates a relationship between tickFactionRelationships
+//    finishing and its next run, so there is no window in which the pair
+//    can drift out of RIVAL before the pin lands.
+//
 // tickIntegrity runs LAST, deliberately: it validates the state every
 // other handler above just produced (see game/integrity/ — the structural
 // tier of the Integrity Engine), so it needs to see this turn's writes, not

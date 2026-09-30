@@ -656,6 +656,16 @@ describe('tickWars coalitions', () => {
       ],
     }
     vi.mocked(prisma.war.findMany).mockResolvedValueOnce([warOne, warTwo] as any)
+    // #510: the candidate lookup has to be able to RETURN busy-ally, or
+    // this asserts nothing. With the roster-wide beforeEach mock ([]) the
+    // coalition pass short-circuits on an empty candidate set and no
+    // participant is created whether the gate is there or not — the test
+    // passed against a build with the factionIdsAtWar check deleted.
+    vi.mocked(prisma.faction.findMany).mockImplementation((async (args: any) =>
+      args?.where?.id?.in?.includes('busy-ally')
+        ? ([{ id: 'busy-ally', name: 'busy-ally', military: 90, influence: 50 }] as any)
+        : ([] as any)) as any
+    )
 
     await tickWars(baseCtx({ turnNumber: simTurn(2) }))
 

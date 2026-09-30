@@ -586,6 +586,15 @@ async function resolveWarProgress(
   const changes: WorldChange[] = []
   const resolvedWarIds = new Set<string>()
 
+  // #510: per-faction attrition, accumulated across every war a faction is
+  // in and applied once after the loop. `base*` is the value as of the
+  // start of this handler, so one clamp against one base replaces N clamps
+  // against the same stale base. See the accumulation site below.
+  const attrition = new Map<
+    string,
+    { name: string; baseResources: number; baseMilitary: number; resourceDelta: number; militaryDelta: number }
+  >()
+
   // The tick orders handlers so weatherTick has already written this turn's
   // weather onto locations — read the contested grounds' weather once,
   // batched, so severe weather can bleed the fighting armies (decideWarProgress).
@@ -708,63 +717,43 @@ async function resolveWarProgress(
 
     // Attrition applies to every living participant on both sides, not just
     // the original two — a coalition shares the cost of fighting.
-    if (!ctx.dryRun) {
-      for (const p of attackerSide) {
-        await ctx.db.faction.update({
-          where: { id: p.factionId },
-          data: {
-            resources: clamp(p.faction.resources + progress.attackerResourceDelta, 0, 100),
-            military: clamp(p.faction.military + progress.attackerMilitaryDelta, 0, 100),
-          },
-        })
+    //
+    // #510 — ACCUMULATED PER FACTION, NOT WRITTEN PER WAR.
+    //
+    // This used to write inside the war loop, computing each new value from
+    // `p.faction.resources` — the snapshot loaded once with `activeWars`. A
+    // faction appearing in two wars in the same tick therefore did
+    // last-write-wins arithmetic on a stale base: both wars subtracted from
+    // the same starting number, so the second write overwrote the first and
+    // the faction paid one war's attrition while fighting two. The emitted
+    // WorldChange had the same flaw — two rows, both claiming the same
+    // `previousValue`.
+    //
+    // That is unreachable today: `factionIdsAtWar` gates both coalition
+    // joining and new declarations on every side (see tickWars), so nobody
+    // is ever in two ESCALATING wars at once — an invariant now pinned by
+    // its own test rather than left implicit. Accumulating is what makes
+    // the arithmetic correct WITHOUT depending on that gate holding: the
+    // deltas add up per faction and are applied once, to one base, below.
+    for (const [side, resourceDelta, militaryDelta] of [
+      [attackerSide, progress.attackerResourceDelta, progress.attackerMilitaryDelta],
+      [defenderSide, progress.defenderResourceDelta, progress.defenderMilitaryDelta],
+    ] as const) {
+      for (const p of side) {
+        const acc = attrition.get(p.factionId)
+        if (acc) {
+          acc.resourceDelta += resourceDelta
+          acc.militaryDelta += militaryDelta
+        } else {
+          attrition.set(p.factionId, {
+            name: p.faction.name,
+            baseResources: p.faction.resources,
+            baseMilitary: p.faction.military,
+            resourceDelta,
+            militaryDelta,
+          })
+        }
       }
-      for (const p of defenderSide) {
-        await ctx.db.faction.update({
-          where: { id: p.factionId },
-          data: {
-            resources: clamp(p.faction.resources + progress.defenderResourceDelta, 0, 100),
-            military: clamp(p.faction.military + progress.defenderMilitaryDelta, 0, 100),
-          },
-        })
-      }
-    }
-
-    // The attrition writes above go out via faction.update with no
-    // WorldChange, so npcDispositionTick's treasury-collapse classifier
-    // never saw war-driven LOW transitions — a faction could bleed to
-    // zero resources sustaining a war and the treasury read stayed blind.
-    // One resources change per participant fixes the read. significant:
-    // false keeps these out of history/rumor spam; the disposition
-    // reader has no significance filter on its faction-event query, so it
-    // still sees the LOW transition. Pushed outside the dryRun guard,
-    // like every other change this function emits.
-    for (const p of attackerSide) {
-      changes.push({
-        entityType: 'FACTION',
-        entityId: p.factionId,
-        entityName: p.faction.name,
-        campaignId: ctx.campaignId,
-        field: 'resources',
-        previousValue: p.faction.resources,
-        newValue: clamp(p.faction.resources + progress.attackerResourceDelta, 0, 100),
-        reason: `${p.faction.name} burns resources sustaining the war effort`,
-        significant: false,
-        importance: 'MINOR',
-      })
-    }
-    for (const p of defenderSide) {
-      changes.push({
-        entityType: 'FACTION',
-        entityId: p.factionId,
-        entityName: p.faction.name,
-        campaignId: ctx.campaignId,
-        field: 'resources',
-        previousValue: p.faction.resources,
-        newValue: clamp(p.faction.resources + progress.defenderResourceDelta, 0, 100),
-        reason: `${p.faction.name} burns resources sustaining the war effort`,
-        significant: false,
-        importance: 'MINOR',
-      })
     }
 
     const turnsElapsed = ctx.turnNumber - war.startedTurn
@@ -861,6 +850,43 @@ async function resolveWarProgress(
       significant: true,
       importance: 'MAJOR',
       originLocationId: war.contestedLocationId ?? null,
+    })
+  }
+
+  // #510: one write and one WorldChange per faction, against the single base
+  // each faction started the handler with.
+  //
+  // The WorldChange exists because the attrition write goes out as a bare
+  // faction.update: without it, npcDispositionTick's treasury-collapse
+  // classifier never saw war-driven LOW transitions, and a faction could
+  // bleed to zero resources sustaining a war with the treasury read blind.
+  // `significant: false` keeps these out of history/rumor spam; the
+  // disposition reader has no significance filter on its faction-event
+  // query, so it still sees the LOW transition. Emitted outside the dryRun
+  // guard, like every other change this function produces — a dry run
+  // reports what WOULD happen without writing it.
+  for (const [factionId, acc] of attrition) {
+    const newResources = clamp(acc.baseResources + acc.resourceDelta, 0, 100)
+    const newMilitary = clamp(acc.baseMilitary + acc.militaryDelta, 0, 100)
+
+    if (!ctx.dryRun) {
+      await ctx.db.faction.update({
+        where: { id: factionId },
+        data: { resources: newResources, military: newMilitary },
+      })
+    }
+
+    changes.push({
+      entityType: 'FACTION',
+      entityId: factionId,
+      entityName: acc.name,
+      campaignId: ctx.campaignId,
+      field: 'resources',
+      previousValue: acc.baseResources,
+      newValue: newResources,
+      reason: `${acc.name} burns resources sustaining the war effort`,
+      significant: false,
+      importance: 'MINOR',
     })
   }
 

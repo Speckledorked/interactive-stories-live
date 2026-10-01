@@ -11,6 +11,8 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
+import { GitFork } from 'lucide-react'
 import { fontDisplay, fontSans } from '@/lib/fonts'
 import { SectionHeader } from '@/components/ui/section-header'
 
@@ -22,6 +24,10 @@ interface ChronicleScene {
 
 interface ChronicleData {
   campaign: { title: string; description: string | null; universe: string | null }
+  // #490: set when this campaign's world is published and listed, so a
+  // reader can start their own from it. Null otherwise — and the CTA simply
+  // does not render, rather than linking somewhere that would 404.
+  worldSlug: string | null
   scenes: ChronicleScene[]
 }
 
@@ -99,6 +105,27 @@ export default function PublicChroniclePage() {
           </div>
         )}
       </main>
+
+      {/* #490: the link out. A chronicle share link was a well-built dead
+          end — someone could read a whole campaign and have nowhere to go
+          with it. Rendered below the story rather than above it on purpose:
+          the pitch is the story, so it has to be read first. */}
+      {data.worldSlug && (
+        <section className="border-t border-myth-border px-4 py-10 text-center">
+          <p className="mx-auto mb-4 max-w-md text-sm text-myth-ink-muted">
+            This world is one you can play in. Starting from it gives you your own
+            copy — the same factions, powers and opening situation — to take
+            wherever you like.
+          </p>
+          <Link
+            href={`/worlds/${data.worldSlug}`}
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-myth-accent px-6 py-3 font-semibold text-myth-accent-ink transition-opacity hover:opacity-90"
+          >
+            <GitFork className="h-4 w-4" />
+            Start your own from this world
+          </Link>
+        </section>
+      )}
 
       <footer className="pb-8 text-center text-xs text-myth-ink-faint">
         A read-only chronicle — no login required.

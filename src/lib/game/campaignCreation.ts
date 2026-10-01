@@ -36,6 +36,33 @@ export interface ValidatedLoreImport {
   sourceTitle: string | null
 }
 
+/**
+ * #490: everything the two generation stages produce, in one object.
+ *
+ * Exists so a fork can hand creation a world that has ALREADY been
+ * generated — by whoever published it — and skip straight to seeding. The
+ * expensive part of making a world is paid for once, by its author, and
+ * every fork after that is instant and costs nothing.
+ *
+ * Deliberately the exact shape of the generation OUTPUT rather than a
+ * tidier format of its own: a fork then replays the ordinary creation path
+ * instead of going through a second seeding implementation that would drift
+ * from it. Every field is optional for the same reason the live path
+ * tolerates each one failing — a world missing its move flavour still
+ * works, it just reads more generically.
+ */
+export interface PreGeneratedWorld {
+  worldSeed?: string
+  factions?: NonNullable<Awaited<ReturnType<typeof generateWorldFromTemplate>>>['factions']
+  capabilities?: GeneratedCapability[]
+  statLabels?: GeneratedStatLabels
+  fronts?: GeneratedFront[]
+  worldExtras?: GeneratedWorldExtras | null
+  moveFlavor?: GeneratedMoveFlavor[] | null
+  calendar?: GeneratedCalendar | null
+  worldRules?: GeneratedWorldRule[] | null
+}
+
 export interface CreateCampaignInput {
   title: string
   description?: string
@@ -55,10 +82,26 @@ export interface CreateCampaignInput {
    * parallel ones), SEEDING (the transaction).
    */
   onStage?: (stage: 'WORLD' | 'DETAILS' | 'SEEDING') => Promise<void> | void
+  /**
+   * #490: a world that has already been generated (a fork of a published
+   * one). When present BOTH model stages are skipped entirely and seeding
+   * runs against this instead — no provider calls, nothing billed, and a
+   * fork that lands in about as long as the transaction takes.
+   */
+  preGenerated?: PreGeneratedWorld
+}
+
+/** The live first-stage call, with its log line. Split out only so the
+ *  pre-generated branch above reads as one expression. */
+async function generateWorldFromTemplateLogged(
+  ...args: Parameters<typeof generateWorldFromTemplate>
+): ReturnType<typeof generateWorldFromTemplate> {
+  console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
+  return generateWorldFromTemplate(...args)
 }
 
 export async function createCampaign(input: CreateCampaignInput) {
-  const { title, description, initialWorldSeed, resolvedUniverse, resolvedSystemPrompt, template, validatedLore, userId, onStage } = input
+  const { title, description, initialWorldSeed, resolvedUniverse, resolvedSystemPrompt, template, validatedLore, userId, onStage, preGenerated } = input
 
   // Swallowed on purpose: a progress report that throws would fail a
   // creation that was otherwise going fine, which trades the actual
@@ -86,14 +129,25 @@ export async function createCampaign(input: CreateCampaignInput) {
   let generatedLocations: GeneratedLocation[] | undefined
 
   await reportStage('WORLD')
-  console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
-  const generated = await generateWorldFromTemplate(
-    template?.id || null,
-    title,
-    description || '',
-    template ? undefined : resolvedUniverse,
-    initialWorldSeed || undefined
-  )
+  // #490: a fork arrives with its world already generated, so no model call
+  // happens here. Shaped exactly like what generateWorldFromTemplate
+  // returns, so everything downstream — the fallback branches included — is
+  // the identical code path rather than a parallel one.
+  const generated = preGenerated
+    ? {
+        worldSeed: preGenerated.worldSeed ?? '',
+        factions: preGenerated.factions ?? [],
+        capabilities: preGenerated.capabilities ?? [],
+        statLabels: preGenerated.statLabels,
+        fronts: preGenerated.fronts ?? [],
+      }
+    : await generateWorldFromTemplateLogged(
+        template?.id || null,
+        title,
+        description || '',
+        template ? undefined : resolvedUniverse,
+        initialWorldSeed || undefined
+      )
   if (generated) {
     if (!initialWorldSeed) resolvedWorldSeed = generated.worldSeed
     generatedFactions = generated.factions
@@ -122,6 +176,18 @@ export async function createCampaign(input: CreateCampaignInput) {
   let generatedCalendar: GeneratedCalendar | null = null
   let generatedWorldRules: GeneratedWorldRule[] | null = null
   await reportStage('DETAILS')
+  if (preGenerated) {
+    // #490: same assignments the live branch makes below, taken from the
+    // snapshot instead of from four model calls.
+    worldExtras = preGenerated.worldExtras ?? null
+    generatedMoveFlavor = preGenerated.moveFlavor ?? null
+    generatedCalendar = preGenerated.calendar ?? null
+    generatedWorldRules = preGenerated.worldRules ?? null
+    if (worldExtras) {
+      generatedNpcs = worldExtras.npcs
+      generatedLocations = worldExtras.locations
+    }
+  } else {
   try {
     // Independent calls, run together: move flavor doesn't need factions/
     // capabilities as input (only stat labels), the calendar needs
@@ -152,6 +218,7 @@ export async function createCampaign(input: CreateCampaignInput) {
     }
   } catch (extrasError) {
     console.error('World extras generation failed (non-critical):', extrasError)
+  }
   }
 
   // Unlike worldExtras/moveFlavor, a calendar is never optional — every

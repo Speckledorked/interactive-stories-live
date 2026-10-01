@@ -28,6 +28,19 @@ export async function GET(
       return NextResponse.json({ error: 'This chronicle link is not available' }, { status: 404 })
     }
 
+    // #490: if this campaign's world has been published, the chronicle can
+    // offer its reader a way in. The issue's point exactly — these links
+    // were well-built and ended in a full stop, so a reader who had just
+    // been sold on a world had nowhere to go with that.
+    //
+    // Only a LISTED world: unlisting is the author saying they would rather
+    // not be a starting point, and a CTA that ignored that would make
+    // unlisting meaningless for the surface that drives the most traffic.
+    const publishedWorld = await prisma.publishedWorld.findFirst({
+      where: { sourceCampaignId: campaign.id, isListed: true },
+      select: { slug: true },
+    })
+
     const scenes = await prisma.scene.findMany({
       where: { campaignId: campaign.id, status: 'RESOLVED' },
       select: {
@@ -44,6 +57,9 @@ export async function GET(
         description: campaign.description,
         universe: campaign.universe,
       },
+      // The slug only. The world's own public page carries everything else,
+      // and duplicating it here would be a second thing to keep in step.
+      worldSlug: publishedWorld?.slug ?? null,
       // `title` is deliberately absent: Scene.title was a column nothing ever
       // wrote (dropped 20260820140000), so every chronicle entry shipped
       // title: null and readers rendered their own fallback anyway.

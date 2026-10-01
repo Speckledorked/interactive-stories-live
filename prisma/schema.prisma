@@ -280,6 +280,7 @@ model User {
   createInvites       CampaignInvite[]     @relation("InviteCreator")
   receivedInvites     CampaignInvite[]     @relation("InviteRecipient")
   creationJobs        CampaignCreationJob[] @relation("CampaignCreationJobs")
+  publishedWorlds     PublishedWorld[]     @relation("PublishedWorlds")
   diceRolls           DiceRoll[]
   gmClarifications    GmClarification[]
 
@@ -499,6 +500,7 @@ model Campaign {
   timeline         TimelineEvent[]
   worldMeta        WorldMeta?
   invites          CampaignInvite[]
+  publishedWorlds  PublishedWorld[]     @relation("PublishedFrom")
   moves            Move[]
   diceRolls        DiceRoll[]
   gmClarifications GmClarification[]
@@ -3703,6 +3705,73 @@ model Friendship {
   @@index([user1Id])
   @@index([user2Id])
   @@map("friendships")
+}
+
+//
+// PUBLISHED WORLDS (#490)
+//
+// Templates were three hard-coded entries in a TypeScript file. For a
+// product whose whole shape is user-generated worlds there was no
+// user-generated loop at all: every campaign started from zero, alone, and
+// nothing a player made could ever be a starting point for anyone else.
+//
+// A published world is a SNAPSHOT OF A WORLD DEFINITION, never a campaign's
+// play history. Factions, the capability scaffold, stat labels, the
+// calendar, world rules, archetypes, the opening premise — the things that
+// make a setting. Not scenes, characters, messages, rolls or whispers:
+// those are somebody's game, they are what the chronicle share link is
+// for, and forking into a stranger's transcript is both the wrong feature
+// and a privacy problem.
+//
+// `snapshot` holds exactly the bundle campaign creation's two generation
+// stages produce, so forking replays the ordinary creation path with the
+// model calls skipped rather than through a second seeding implementation.
+// That is what makes a fork instant — the expensive part has already been
+// paid for once, by whoever published it.
+//
+// Deliberately NOT here: ratings. A rating system needs moderation, abuse
+// handling, and a decision about what is even being rated (the premise? a
+// stranger's campaign?). Shipping one nobody has agreed to moderate is
+// worse than not shipping it. forkCount and viewCount are the honest
+// signals available without any of that.
+
+model PublishedWorld {
+  id   String @id @default(cuid())
+  /// URL-safe, derived from the title and uniquified. Never reused.
+  slug String @unique
+
+  /// The campaign this was published FROM. Null once that campaign is gone
+  /// — a published world outlives its source, or forks would break when
+  /// the author deleted their own game.
+  sourceCampaignId String?
+  publishedBy      String
+
+  title       String
+  description String  @db.Text
+  universe    String
+
+  /// The world definition. Shape: WorldSnapshot (lib/worlds/worldSnapshot.ts).
+  snapshot Json
+
+  /// Hidden from the directory without being deleted, so existing forks and
+  /// links keep working and the author can relist.
+  isListed Boolean @default(true)
+
+  forkCount Int @default(0)
+  viewCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  publisher User      @relation("PublishedWorlds", fields: [publishedBy], references: [id], onDelete: Cascade)
+  source    Campaign? @relation("PublishedFrom", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+
+  // The directory's own ordering: most-forked first among listed worlds.
+  @@index([isListed, forkCount])
+  @@index([publishedBy])
+  // "Is this campaign already published?" for the publish button's state.
+  @@index([sourceCampaignId])
+  @@map("published_worlds")
 }
 
 //

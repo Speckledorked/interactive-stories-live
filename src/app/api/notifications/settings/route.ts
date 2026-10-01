@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest) {
     // Validate settings
     const allowedFields = [
       'emailEnabled', 'emailTurnReminders', 'emailSceneChanges', 'emailMentions',
-      'emailWhispers', 'emailCampaignInvites', 'emailWorldEvents',
+      'emailWhispers', 'emailCampaignInvites', 'emailWorldEvents', 'emailWinBack',
       'pushEnabled', 'pushTurnReminders', 'pushSceneChanges', 'pushMentions',
       'pushWhispers', 'pushCampaignInvites',
       'soundEnabled', 'soundTurnReminders', 'soundSceneChanges', 'soundMentions',

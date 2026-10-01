@@ -337,6 +337,20 @@ model CampaignMembership {
   // they've never landed on the lobby yet (no recap to show).
   lastViewedAt DateTime?
 
+  // #506: win-back state, per MEMBERSHIP rather than per user.
+  //
+  // A player lapsed on one world and playing another every night is not a
+  // lapsed player, and a per-user counter would either spam them about the
+  // world they left or go silent about it because of the one they didn't.
+  // The thing that lapses is a seat at a table.
+  //
+  // lastViewedAt is the lapse signal rather than User.lastSeenAt, which is
+  // only stamped at login — with 30-day refresh tokens an active player's
+  // lastSeenAt is routinely weeks old, so building on it would mail people
+  // in the middle of a campaign they are playing.
+  winBackSentAt DateTime?
+  winBackCount  Int       @default(0)
+
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
@@ -2601,6 +2615,11 @@ model UserNotificationSettings {
   emailWhispers        Boolean @default(true)
   emailCampaignInvites Boolean @default(true)
   emailWorldEvents     Boolean @default(false)
+  // #506: the only mail MythOS sends to someone who is NOT currently using
+  // it, so it gets its own switch rather than riding emailWorldEvents —
+  // those two preferences answer different questions ("tell me what the
+  // world did while I play" vs "tell me when I've stopped").
+  emailWinBack         Boolean @default(true)
 
   // Browser push preferences. These briefly went away along with a push
   // pipeline that could never fire; they're back because the pipeline is

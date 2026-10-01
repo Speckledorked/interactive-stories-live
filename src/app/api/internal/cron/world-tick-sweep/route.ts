@@ -12,6 +12,7 @@ import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
 import { reportError } from '@/lib/monitoring'
+import { sweepWinBackEmails } from '@/lib/notifications/winBackSweep'
 
 // Hobby-plan-safe, and the number the sweep's own duration budget is
 // derived from — SWEEP_DURATION_BUDGET_MS in worldTurnSweep.ts. Raising
@@ -145,5 +146,24 @@ export async function GET(request: NextRequest) {
     await nonFatal('global-retention-pass', err)
   }
 
-  return NextResponse.json({ ...result, prunedRows, globalPrunedRows })
+  // #506: the retention loop's outward half.
+  //
+  // Deliberately LAST, and deliberately after the world-turn sweep above:
+  // the sweep is what produces the WorldEvent rows a win-back letter is
+  // built from, so running this first would mail people yesterday's news
+  // and skip anyone whose world only moved today. Best-effort like every
+  // other step — nobody's mail is worth failing the turn that moved the
+  // world for everyone.
+  let winBack = { considered: 0, sent: 0, failed: 0 }
+  try {
+    const sweep = await sweepWinBackEmails()
+    winBack = { considered: sweep.considered, sent: sweep.sent, failed: sweep.failed }
+    if (sweep.sent > 0 || sweep.failed > 0) {
+      console.log(`✉️  Cron win-back: ${sweep.sent} sent, ${sweep.failed} failed, ${sweep.considered} considered`)
+    }
+  } catch (err) {
+    await nonFatal('win-back-sweep', err)
+  }
+
+  return NextResponse.json({ ...result, prunedRows, globalPrunedRows, winBack })
 }

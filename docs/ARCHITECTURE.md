@@ -304,7 +304,7 @@ of the three tags is a bug in this list.
   in and nothing about what the route wrote. That check is #399 turned into
   a mechanism: the invite-join route granted a role no test looked at, so
   `'ADMIN'` would have shipped green.
-  <!-- derived:behavioralRouteCount=109 -->109 of the 113 carry a
+  <!-- derived:behavioralRouteCount=110 -->110 of the 113 carry a
   behavioral assertion. This entry's own earlier wording — "the last tiers
   covered mostly gate + shape assertions" — was PESSIMISTIC rather than
   merely vague; only three routes are gate-and-shape only, and none of them

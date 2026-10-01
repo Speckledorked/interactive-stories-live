@@ -19,6 +19,7 @@ interface NotificationSettings {
   emailWhispers: boolean;
   emailCampaignInvites: boolean;
   emailWorldEvents: boolean;
+  emailWinBack: boolean;
 
   // Push notifications
   pushEnabled: boolean;
@@ -281,6 +282,12 @@ export default function NotificationSettings() {
               onChange={() => handleToggle('emailWorldEvents')}
               label="World Events"
               description="Major story developments"
+            />
+            <ToggleSwitch
+              enabled={settings.emailWinBack}
+              onChange={() => handleToggle('emailWinBack')}
+              label="When You Have Been Away"
+              description="What your worlds did while you were gone"
             />
           </div>
         )}

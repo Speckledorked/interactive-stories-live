@@ -291,6 +291,13 @@ export default function HomePage() {
           <Link href="/help" className="underline hover:text-myth-ink-muted">
             Help
           </Link>
+          {/* #490: the directory. A stranger can look at worlds people have
+              built before being asked to make an account — which is a far
+              better pitch than any amount of copy about what MythOS does. */}
+          <span className="mx-3">·</span>
+          <Link href="/worlds" className="underline hover:text-myth-ink-muted">
+            Worlds
+          </Link>
         </p>
       </section>
     </div>

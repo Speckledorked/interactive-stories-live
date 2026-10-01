@@ -40,6 +40,11 @@ const COPY_GLOBS = [
   'src/lib/tutorial/content/**/*.ts',
   'src/lib/releases/**/*.ts',
   'src/lib/notifications/email-service.ts',
+  // #506: win-back copy. The letter itself is assembled in email-service.ts
+  // (already covered), but the subject-line phrasing lives in winBack.ts, so
+  // a new copy surface would otherwise be exempt from the one rule that
+  // applies to everything a user reads.
+  'src/lib/notifications/winBack.ts',
   'src/lib/ai/validation.ts',
   'src/lib/game/campaign-health.ts',
 ]

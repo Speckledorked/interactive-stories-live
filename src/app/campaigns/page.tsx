@@ -28,6 +28,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 
+// #493: how the creation modal follows its job. Stages take tens of seconds
+// each, so a tighter interval would be polling for its own sake.
+const CREATION_POLL_INTERVAL_MS = 2000
+// How long this modal will claim to know what is happening. Not a timeout on
+// the creation itself — the worker carries on regardless, and the finished
+// campaign appears in the list either way.
+const CREATION_POLL_DEADLINE_MS = 5 * 60 * 1000
+
 interface Campaign {
   id: string
   title: string
@@ -279,6 +287,10 @@ function CreateCampaignModal({
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // #493: the creation job's current stage, in words. Null until the job
+  // reports one, so the button keeps its old label until there is something
+  // truer to say.
+  const [stageLabel, setStageLabel] = useState<string | null>(null)
 
   const handleTemplateSelect = (templateId: string | null) => {
     setSelectedTemplate(templateId)
@@ -336,12 +348,56 @@ function CreateCampaignModal({
         throw new Error(data.error || 'Failed to create campaign')
       }
 
-      onSuccess()
+      // #493: the request now returns a job, not a campaign. Everything the
+      // world needs still has to be built — it just happens in its own
+      // invocation, and this follows along instead of holding a spinner for
+      // a minute with nothing to say.
+      const { jobId } = await response.json()
+      await followCreationJob(jobId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create campaign')
-    } finally {
+      setStageLabel(null)
       setLoading(false)
     }
+  }
+
+  /**
+   * Poll the creation job until it finishes.
+   *
+   * Polling rather than realtime: #491's channels are per campaign or per
+   * user, and the campaign this is about does not exist yet, so a campaign
+   * channel cannot carry it. A few seconds between stage changes is well
+   * inside what the stages themselves take.
+   *
+   * The deadline is not a timeout on the creation — the worker keeps going
+   * regardless, and a finished campaign shows up in the list either way.
+   * It is a limit on how long this modal will sit here claiming to know
+   * what is happening.
+   */
+  const followCreationJob = async (jobId: string) => {
+    const deadline = Date.now() + CREATION_POLL_DEADLINE_MS
+
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, CREATION_POLL_INTERVAL_MS))
+
+      const response = await authenticatedFetch(`/api/campaigns/creation-jobs/${jobId}`)
+      if (!response.ok) continue
+
+      const job = await response.json()
+      if (job.label) setStageLabel(job.label)
+
+      if (job.status === 'COMPLETED' && job.campaignId) {
+        onSuccess()
+        return
+      }
+      if (job.status === 'FAILED') {
+        throw new Error(job.error || 'Your world could not be built. Nothing was charged for the attempt.')
+      }
+    }
+
+    // Still going. Say so honestly rather than reporting a failure that has
+    // not happened — the campaign will appear in the list when it lands.
+    throw new Error('This is taking longer than usual. Your world is still being built, and will appear in your campaigns when it is ready.')
   }
 
   const selectedTpl = selectedTemplate ? TEMPLATES.find(t => t.id === selectedTemplate) : null
@@ -595,7 +651,7 @@ function CreateCampaignModal({
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
                       <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-myth-accent-ink" />
-                      {selectedTemplate ? 'Building your world…' : 'Creating…'}
+                      {stageLabel || (selectedTemplate ? 'Building your world…' : 'Creating…')}
                     </span>
                   ) : (
                     'Create Campaign'

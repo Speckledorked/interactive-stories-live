@@ -41,11 +41,23 @@ export async function POST(
       )
     }
 
-    // Check if max uses reached
+    // Check if max uses reached. Re-checked atomically at claim time below
+    // — this is the early, friendly rejection, not the enforcement.
     if (invite.maxUses > 0 && invite.uses >= invite.maxUses) {
       return NextResponse.json(
         { error: 'This invite link has reached its maximum uses' },
         { status: 400 }
+      )
+    }
+
+    // #507: an ADDRESSED invite (invitedUserId set) is redeemable only by
+    // the person it names. Checked before the ban and membership paths so
+    // the wrong recipient learns nothing about the campaign's roster from
+    // which error they get back.
+    if (invite.invitedUserId && invite.invitedUserId !== user.userId) {
+      return NextResponse.json(
+        { error: 'This invite was sent to someone else' },
+        { status: 403 }
       )
     }
 
@@ -70,20 +82,55 @@ export async function POST(
       )
     }
 
-    // Create membership and increment uses in a transaction
-    const [membership] = await prisma.$transaction([
-      prisma.campaignMembership.create({
+    // #507: claim the use ATOMICALLY, still inside ONE transaction.
+    //
+    // Two properties, and the route previously had only one of them. The
+    // transaction is what keeps the pair honest: a membership created
+    // without the use count moving is a permanently reusable invite, and a
+    // use count moving without a membership is a burned invite that granted
+    // nothing. The read-then-write was the missing half — two people
+    // opening the same one-use link at the same moment both read uses: 0,
+    // both pass the check above, and both join. Scoping the updateMany to
+    // the `uses` value THIS request read means only one of them can match,
+    // and the affected-row count says which.
+    //
+    // The interactive form rather than the array form because the claim's
+    // outcome has to decide whether the membership is written at all, which
+    // an array of independent operations cannot express.
+    //
+    // An unlimited invite (maxUses 0) has nothing to race over — the
+    // counter is a statistic, not a gate — so it takes a plain increment
+    // rather than serialising every join behind a compare-and-set.
+    const claimedSeat = await prisma.$transaction(async (tx) => {
+      if (invite.maxUses > 0) {
+        const claimed = await tx.campaignInvite.updateMany({
+          where: { id: invite.id, uses: invite.uses },
+          data: { uses: { increment: 1 } },
+        })
+        if (claimed.count === 0) return false
+      } else {
+        await tx.campaignInvite.update({
+          where: { id: invite.id },
+          data: { uses: { increment: 1 } },
+        })
+      }
+
+      await tx.campaignMembership.create({
         data: {
           userId: user.userId,
           campaignId: invite.campaignId,
           role: 'PLAYER',
         },
-      }),
-      prisma.campaignInvite.update({
-        where: { id: invite.id },
-        data: { uses: { increment: 1 } },
-      }),
-    ])
+      })
+      return true
+    })
+
+    if (!claimedSeat) {
+      return NextResponse.json(
+        { error: 'This invite link has reached its maximum uses' },
+        { status: 400 }
+      )
+    }
 
     // The one place a real campaign-invite notification actually fires —
     // previously this type existed only as a hijacked stand-in for friend
@@ -167,6 +214,11 @@ export async function GET(
       campaign: invite.campaign,
       isExpired,
       isExhausted,
+      // #507: the page needs to know an invite is addressed so a wrong
+      // recipient is told plainly rather than being offered a Join button
+      // that 403s. The recipient's identity is NOT returned — only that
+      // one exists — since this route is unauthenticated.
+      isAddressed: invite.invitedUserId !== null,
       canJoin: !isExpired && !isExhausted,
     })
   } catch (error) {

@@ -16,11 +16,14 @@ vi.mock('@/lib/game/retention', () => ({ pruneCampaignHistory: vi.fn(), pruneGlo
 vi.mock('@/lib/notifications/turn-tracker', () => ({
   TurnTracker: { sendPeriodicReminders: vi.fn(), checkExpiredTurns: vi.fn(), notifyOverdueTurns: vi.fn() },
 }))
+// #506: the retention loop's outward half rides this same cron.
+vi.mock('@/lib/notifications/winBackSweep', () => ({ sweepWinBackEmails: vi.fn() }))
 
 import { sweepWorldTurnsForAllCampaigns } from '@/lib/game/worldTurnSweep'
 import { sweepGloballyStuckResolutionJobs } from '@/lib/game/resolutionQueue'
 import { TurnTracker } from '@/lib/notifications/turn-tracker'
 import { pruneGlobalTables } from '@/lib/game/retention'
+import { sweepWinBackEmails } from '@/lib/notifications/winBackSweep'
 import { GET } from '../route'
 
 const ORIGINAL_SECRET = process.env.CRON_SECRET
@@ -38,6 +41,7 @@ beforeEach(() => {
   ;(TurnTracker.sendPeriodicReminders as any).mockResolvedValue(undefined)
   ;(TurnTracker.checkExpiredTurns as any).mockResolvedValue(0)
   ;(TurnTracker.notifyOverdueTurns as any).mockResolvedValue(0)
+  ;(sweepWinBackEmails as any).mockResolvedValue({ considered: 0, sent: 0, failed: 0, skipped: {} })
   ;(sweepWorldTurnsForAllCampaigns as any).mockResolvedValue({ ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0, skippedOutOfTime: 0, tickedCampaignIds: [] })
   // #501: the platform-wide retention pass, which runs regardless of what
   // ticked — per-campaign pruning only reaches campaigns that did.
@@ -71,7 +75,7 @@ describe('GET', () => {
     const response = await GET(req('sweep-secret'))
     const body = await response.json()
     expect(response.status).toBe(200)
-    expect(body).toEqual({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, skippedOutOfTime: 0, tickedCampaignIds: [], prunedRows: 0, globalPrunedRows: 0 })
+    expect(body).toMatchObject({ ticked: 2, campaignsChecked: 5, failed: 0, skippedAtCap: 3, skippedOutOfTime: 0, tickedCampaignIds: [], prunedRows: 0, globalPrunedRows: 0 })
   })
 
   it('does not abort the sweep when a maintenance step throws', async () => {
@@ -117,6 +121,35 @@ describe('platform-wide retention (#501)', () => {
     // lost — the same contract the per-campaign pass already follows.
     ;(pruneGlobalTables as any).mockRejectedValue(new Error('db down'))
     const response = await GET(req('sweep-secret'))
+    expect(response.status).toBe(200)
+  })
+
+  // #506: ordering and isolation.
+  it('sweeps win-backs AFTER the world turn that produces what they report', async () => {
+    // Running it first would mail people yesterday's news and skip anyone
+    // whose world only moved on this invocation.
+    const order: string[] = []
+    ;(sweepWorldTurnsForAllCampaigns as any).mockImplementation(async () => {
+      order.push('world-turn')
+      return { ticked: 0, campaignsChecked: 0, failed: 0, skippedAtCap: 0, skippedOutOfTime: 0, tickedCampaignIds: [] }
+    })
+    ;(sweepWinBackEmails as any).mockImplementation(async () => {
+      order.push('win-back')
+      return { considered: 0, sent: 0, failed: 0, skipped: {} }
+    })
+
+    await GET(req('sweep-secret'))
+
+    expect(order).toEqual(['world-turn', 'win-back'])
+  })
+
+  it('still reports the turn when the win-back sweep throws', async () => {
+    // Nobody's mail is worth failing the turn that moved the world for
+    // everyone.
+    ;(sweepWinBackEmails as any).mockRejectedValue(new Error('smtp down'))
+
+    const response = await GET(req('sweep-secret'))
+
     expect(response.status).toBe(200)
   })
 })

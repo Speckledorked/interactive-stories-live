@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Check } from 'lucide-react'
+import { X, Check, UserPlus } from 'lucide-react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,18 @@ interface InviteModalProps {
   campaignId: string
   isOpen: boolean
   onClose: () => void
+}
+
+// #507: a friend as the invite picker sees them — annotated with why they
+// can or cannot be invited to THIS campaign, so the reason is on the row
+// instead of arriving as an error after the click.
+interface InvitableFriend {
+  id: string
+  name: string
+  isOnline: boolean
+  isMember: boolean
+  isInvited: boolean
+  isBanned: boolean
 }
 
 interface Invite {
@@ -30,12 +42,48 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
+  const [friends, setFriends] = useState<InvitableFriend[]>([])
+  const [invitingId, setInvitingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
       fetchInvites()
+      fetchFriends()
     }
   }, [isOpen, campaignId])
+
+  const fetchFriends = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/invites/friends`)
+      if (response.ok) {
+        const data = await response.json()
+        setFriends(data.friends || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch friends:', error)
+    }
+  }
+
+  const handleInviteFriend = async (friendId: string) => {
+    setInvitingId(friendId)
+    try {
+      const response = await authenticatedFetch(`/api/campaigns/${campaignId}/invites/friends`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendId }),
+      })
+      if (response.ok) {
+        // Re-read rather than patching the row locally: the server decides
+        // whether this created an invite or reused a live one, and the
+        // invite list below gains a row either way.
+        await Promise.all([fetchFriends(), fetchInvites()])
+      }
+    } catch (error) {
+      console.error('Failed to invite friend:', error)
+    } finally {
+      setInvitingId(null)
+    }
+  }
 
   const fetchInvites = async () => {
     setLoading(true)
@@ -97,6 +145,57 @@ export default function InviteModal({ campaignId, isOpen, onClose }: InviteModal
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {friends.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-myth-ink mb-1">Invite a friend</h3>
+              <p className="text-xs text-myth-ink-faint mb-3">
+                They get the invitation here — no link to send. Only they can use it.
+              </p>
+              <div className="space-y-2">
+                {friends.map((friend) => {
+                  const blockedReason = friend.isMember
+                    ? 'Already playing'
+                    : friend.isBanned
+                      ? 'Banned'
+                      : friend.isInvited
+                        ? 'Invited'
+                        : null
+                  return (
+                    <div
+                      key={friend.id}
+                      className="flex items-center gap-3 bg-myth-surface-sunken border border-myth-border rounded-lg px-3 py-2"
+                    >
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${
+                          friend.isOnline ? 'bg-myth-accent' : 'bg-myth-ink-faint/40'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 truncate text-sm text-myth-ink">{friend.name}</span>
+                      {blockedReason ? (
+                        <span className="text-xs text-myth-ink-faint shrink-0">{blockedReason}</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleInviteFriend(friend.id)}
+                          disabled={invitingId === friend.id}
+                        >
+                          {invitingId === friend.id ? (
+                            'Inviting…'
+                          ) : (
+                            <>
+                              <UserPlus className="w-4 h-4" /> Invite
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <Button
             variant="primary" size="lg" fullWidth
             className="mb-6"

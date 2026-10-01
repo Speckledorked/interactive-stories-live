@@ -3,6 +3,11 @@
 import nodemailer from 'nodemailer';
 import { getAppUrl } from '@/lib/appUrl';
 import { pluralize } from '@/lib/format';
+import {
+  describeJournalEntry,
+  CATEGORY_LABELS,
+  type AbsenceJournal,
+} from '@/lib/game/absenceJournal';
 
 interface EmailParams {
   to: string;
@@ -338,6 +343,97 @@ export class EmailService {
               If you didn't request this reset, please ignore this email.
             </p>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * #506 — the only letter MythOS sends to someone who is not using it.
+   *
+   * Every sentence in the body comes from describeJournalEntry, the same
+   * renderer the lobby's "while you were away" uses. That is deliberate:
+   * the journal handed in has already been fog-gated for this member's own
+   * role, and the renderer never touches WorldEvent.reason, which is
+   * GM-grade and routinely names factions, motives and actors the player
+   * has not learned about. Writing the prose here instead would be a second
+   * copy surface with none of that, and an inbox cannot be un-sent.
+   *
+   * The subject names the world and says the absence vaguely (see
+   * describeAbsence) rather than counting days at someone.
+   */
+  static async sendWinBackEmail(params: {
+    to: string;
+    campaignTitle: string;
+    absence: string;
+    journal: AbsenceJournal;
+  }): Promise<boolean> {
+    return this.sendEmail({
+      to: params.to,
+      subject: `${params.campaignTitle} moved on without you`,
+      html: this.buildWinBackTemplate(params.campaignTitle, params.absence, params.journal),
+    });
+  }
+
+  private static buildWinBackTemplate(
+    campaignTitle: string,
+    absence: string,
+    journal: AbsenceJournal
+  ): string {
+    // Grouped under the journal's own category headings, in its own order,
+    // so the mail reads the way the lobby will when they arrive.
+    const byCategory = new Map<string, string[]>();
+    for (const entry of journal.entries) {
+      const label = CATEGORY_LABELS[entry.category];
+      const lines = byCategory.get(label);
+      if (lines) lines.push(describeJournalEntry(entry));
+      else byCategory.set(label, [describeJournalEntry(entry)]);
+    }
+
+    const sections = [...byCategory.entries()]
+      .map(
+        ([label, lines]) => `
+            <div style="margin-bottom: 18px;">
+              <h3 style="color: #1e40af; margin: 0 0 6px 0; font-size: 15px;">${label}</h3>
+              <ul style="color: #374151; margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6;">
+                ${lines.map((l) => `<li>${l}</li>`).join('')}
+              </ul>
+            </div>`
+      )
+      .join('');
+
+    // Only stated when it is true and known. A "and more besides" on a
+    // complete list is a small lie, and this letter's whole claim is that
+    // something real happened.
+    const remainder = journal.totalEvents - journal.entries.length;
+    const more =
+      remainder > 0
+        ? `<p style="color: #6b7280; font-size: 13px; margin: 0 0 20px 0;">
+             ...and ${remainder} other ${pluralize(remainder, 'thing')} besides.
+           </p>`
+        : '';
+
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 20px;">
+        <div style="background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+          <h1 style="color: #1e40af; margin: 0 0 8px 0; font-size: 22px;">${campaignTitle}</h1>
+          <p style="color: #374151; margin: 0 0 22px 0;">
+            You have been away ${absence}. The world did not wait.
+          </p>
+
+          ${sections}
+          ${more}
+
+          <div style="text-align: center; margin-top: 26px;">
+            <a href="${getAppUrl()}/campaigns"
+               style="background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+              Pick it back up
+            </a>
+          </div>
+
+          <p style="color: #9ca3af; font-size: 12px; margin: 26px 0 0 0; text-align: center;">
+            Would rather not hear about this? Turn it off under notification settings.
+          </p>
         </div>
       </div>
     `;

@@ -28,6 +28,11 @@ export default function JoinCampaignPage() {
   const [canJoin, setCanJoin] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
   const [isExhausted, setIsExhausted] = useState(false)
+  // #507: an addressed invite names one recipient. The GET cannot say WHO
+  // (it is unauthenticated), only that there is one — enough to warn that
+  // joining may be refused, without turning the token into a lookup for
+  // whose invite it was.
+  const [isAddressed, setIsAddressed] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -52,6 +57,7 @@ export default function JoinCampaignPage() {
       setCanJoin(data.canJoin)
       setIsExpired(data.isExpired)
       setIsExhausted(data.isExhausted)
+      setIsAddressed(Boolean(data.isAddressed))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invite')
     } finally {
@@ -148,6 +154,15 @@ export default function JoinCampaignPage() {
             {isExhausted && (
               <div className="rounded-lg border border-myth-warn/30 bg-myth-warn/10 p-3">
                 <p className="text-sm text-myth-warn">This invite link has reached its maximum uses</p>
+              </div>
+            )}
+
+            {isAddressed && canJoin && (
+              <div className="rounded-lg border border-myth-border bg-myth-surface-sunken p-3">
+                <p className="text-sm text-myth-ink-muted">
+                  This invitation was sent to one person in particular. If it was not
+                  sent to you, joining will be declined.
+                </p>
               </div>
             )}
 

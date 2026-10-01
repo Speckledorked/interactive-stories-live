@@ -141,6 +141,12 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
         // survive the other's removal.
         evidence: [{ kind: 'prisma-read' }, { kind: 'payload-key', key: 'campaign' }],
       },
+      // #490: publishing reads the column into a world snapshot, and
+      // forking replays that snapshot through campaignCreation's own
+      // persist step above — so the chain continues rather than ending
+      // here.
+      'src/app/api/campaigns/[id]/publish/route.ts': 'deliver',
+      'src/lib/worlds/worldSnapshot.ts': 'consume',
       'src/lib/ai/sceneResolutionRequest.ts': { role: 'deliver', evidence: { kind: 'payload-key', key: 'advancement_track' } },
       'src/components/character/CharacterSheetDisplay.tsx': 'consume',
       'src/components/character/CharacterSnapshotModal.tsx': 'consume',
@@ -183,6 +189,12 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/game/worldUpdaters/bargainOffers.ts': 'consume',
       'src/lib/game/worldUpdaters/characters.ts': 'consume',
       'src/lib/game/worldUpdaters/quests.ts': 'consume',
+      // #490: publishing reads the column into a world snapshot, and
+      // forking replays that snapshot through campaignCreation's own
+      // persist step above — so the chain continues rather than ending
+      // here.
+      'src/app/api/campaigns/[id]/publish/route.ts': 'deliver',
+      'src/lib/worlds/worldSnapshot.ts': 'consume',
     },
   },
   {
@@ -204,6 +216,12 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/ai/moveFlavor.ts': 'consume',
       'src/lib/ai/worldExtras.ts': 'consume',
       'src/lib/tutorial/content/labels.ts': 'consume',
+      // #490: publishing reads the column into a world snapshot, and
+      // forking replays that snapshot through campaignCreation's own
+      // persist step above — so the chain continues rather than ending
+      // here.
+      'src/app/api/campaigns/[id]/publish/route.ts': 'deliver',
+      'src/lib/worlds/worldSnapshot.ts': 'consume',
     },
   },
   {
@@ -220,12 +238,19 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/game/integrity/checks/factionLeadership.ts': 'consume',
       'src/lib/game/integrity/snapshot.ts': 'consume',
       'src/lib/game/integrity/types.ts': 'consume',
+      // #490: publishing reads the column into a world snapshot, and
+      // forking replays that snapshot through campaignCreation's own
+      // persist step above — so the chain continues rather than ending
+      // here.
+      'src/app/api/campaigns/[id]/publish/route.ts': 'deliver',
+      'src/lib/worlds/worldSnapshot.ts': 'consume',
     },
-    waived: {
-      deliver:
-        'Read directly from the campaign row by the integrity engine, which runs server-side ' +
-        'in the same process — there is no payload boundary to cross.',
-    },
+    // The `deliver` waiver here is gone as of #490, and the staleness check
+    // is what said so. It read: "no payload boundary to cross — the
+    // integrity engine reads this from the campaign row in the same
+    // process." True until publishing started putting the column into a
+    // world snapshot, which is exactly such a boundary, and one that
+    // crosses into other people's campaigns.
   },
   {
     fact: 'Campaign.calendarConfig',
@@ -243,6 +268,12 @@ export const GENERATED_COLUMN_FLOWS: DataFlow[] = [
       'src/lib/game/worldTick.ts': 'consume',
       'src/lib/game/tick/clockTick.ts': 'consume',
       'src/lib/game/tick/seasonTick.ts': 'consume',
+      // #490: publishing reads the column into a world snapshot, and
+      // forking replays that snapshot through campaignCreation's own
+      // persist step above — so the chain continues rather than ending
+      // here.
+      'src/app/api/campaigns/[id]/publish/route.ts': 'deliver',
+      'src/lib/worlds/worldSnapshot.ts': 'consume',
     },
     waived: {
       generate:

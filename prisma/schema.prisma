@@ -278,6 +278,9 @@ model User {
   characters          Character[]
   playerActions       PlayerAction[]
   createInvites       CampaignInvite[]     @relation("InviteCreator")
+  receivedInvites     CampaignInvite[]     @relation("InviteRecipient")
+  creationJobs        CampaignCreationJob[] @relation("CampaignCreationJobs")
+  publishedWorlds     PublishedWorld[]     @relation("PublishedWorlds")
   diceRolls           DiceRoll[]
   gmClarifications    GmClarification[]
 
@@ -335,6 +338,20 @@ model CampaignMembership {
   // "While you were away" recaps diff offscreen fallout against. Null means
   // they've never landed on the lobby yet (no recap to show).
   lastViewedAt DateTime?
+
+  // #506: win-back state, per MEMBERSHIP rather than per user.
+  //
+  // A player lapsed on one world and playing another every night is not a
+  // lapsed player, and a per-user counter would either spam them about the
+  // world they left or go silent about it because of the one they didn't.
+  // The thing that lapses is a seat at a table.
+  //
+  // lastViewedAt is the lapse signal rather than User.lastSeenAt, which is
+  // only stamped at login — with 30-day refresh tokens an active player's
+  // lastSeenAt is routinely weeks old, so building on it would mail people
+  // in the middle of a campaign they are playing.
+  winBackSentAt DateTime?
+  winBackCount  Int       @default(0)
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
@@ -483,6 +500,7 @@ model Campaign {
   timeline         TimelineEvent[]
   worldMeta        WorldMeta?
   invites          CampaignInvite[]
+  publishedWorlds  PublishedWorld[]     @relation("PublishedFrom")
   moves            Move[]
   diceRolls        DiceRoll[]
   gmClarifications GmClarification[]
@@ -2332,21 +2350,39 @@ model WorldMeta {
 // INVITES
 //
 
+// #507: an invite is either a LINK (invitedUserId null — anyone holding the
+// token may redeem it, up to maxUses) or ADDRESSED to one user. The friends
+// system had no way into play: it could tell you who your friends were and
+// nothing else, while campaign invites were bearer tokens pasted into a chat
+// somewhere else. An addressed invite is the bridge — issued to a specific
+// friend, redeemable only by them, and delivered in-app rather than by the
+// player having to find another channel to send a link over.
+//
+// Nullable rather than a separate model because every other property of an
+// invite (token, expiry, the join flow, the ban check) is identical; only
+// WHO may redeem it differs. join/[token] enforces that difference, and the
+// GET there reports it so a wrong-recipient link says so plainly instead of
+// failing at the last step.
 model CampaignInvite {
-  id         String   @id @default(cuid())
-  campaignId String
-  token      String   @unique @default(cuid())
-  createdBy  String
-  expiresAt  DateTime
-  maxUses    Int      @default(0)
-  uses       Int      @default(0)
-  createdAt  DateTime @default(now())
+  id            String   @id @default(cuid())
+  campaignId    String
+  token         String   @unique @default(cuid())
+  createdBy     String
+  invitedUserId String?
+  expiresAt     DateTime
+  maxUses       Int      @default(0)
+  uses          Int      @default(0)
+  createdAt     DateTime @default(now())
 
   campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   createdByUser User     @relation("InviteCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  invitedUser   User?    @relation("InviteRecipient", fields: [invitedUserId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([campaignId])
+  // Answers "has this friend already been invited to this campaign?" for the
+  // picker, which would otherwise scan every invite the campaign ever had.
+  @@index([invitedUserId, campaignId])
 }
 
 //
@@ -2582,6 +2618,11 @@ model UserNotificationSettings {
   emailWhispers        Boolean @default(true)
   emailCampaignInvites Boolean @default(true)
   emailWorldEvents     Boolean @default(false)
+  // #506: the only mail MythOS sends to someone who is NOT currently using
+  // it, so it gets its own switch rather than riding emailWorldEvents —
+  // those two preferences answer different questions ("tell me what the
+  // world did while I play" vs "tell me when I've stopped").
+  emailWinBack         Boolean @default(true)
 
   // Browser push preferences. These briefly went away along with a push
   // pipeline that could never fire; they're back because the pipeline is
@@ -3664,6 +3705,130 @@ model Friendship {
   @@index([user1Id])
   @@index([user2Id])
   @@map("friendships")
+}
+
+//
+// PUBLISHED WORLDS (#490)
+//
+// Templates were three hard-coded entries in a TypeScript file. For a
+// product whose whole shape is user-generated worlds there was no
+// user-generated loop at all: every campaign started from zero, alone, and
+// nothing a player made could ever be a starting point for anyone else.
+//
+// A published world is a SNAPSHOT OF A WORLD DEFINITION, never a campaign's
+// play history. Factions, the capability scaffold, stat labels, the
+// calendar, world rules, archetypes, the opening premise — the things that
+// make a setting. Not scenes, characters, messages, rolls or whispers:
+// those are somebody's game, they are what the chronicle share link is
+// for, and forking into a stranger's transcript is both the wrong feature
+// and a privacy problem.
+//
+// `snapshot` holds exactly the bundle campaign creation's two generation
+// stages produce, so forking replays the ordinary creation path with the
+// model calls skipped rather than through a second seeding implementation.
+// That is what makes a fork instant — the expensive part has already been
+// paid for once, by whoever published it.
+//
+// Deliberately NOT here: ratings. A rating system needs moderation, abuse
+// handling, and a decision about what is even being rated (the premise? a
+// stranger's campaign?). Shipping one nobody has agreed to moderate is
+// worse than not shipping it. forkCount and viewCount are the honest
+// signals available without any of that.
+
+model PublishedWorld {
+  id   String @id @default(cuid())
+  /// URL-safe, derived from the title and uniquified. Never reused.
+  slug String @unique
+
+  /// The campaign this was published FROM. Null once that campaign is gone
+  /// — a published world outlives its source, or forks would break when
+  /// the author deleted their own game.
+  sourceCampaignId String?
+  publishedBy      String
+
+  title       String
+  description String  @db.Text
+  universe    String
+
+  /// The world definition. Shape: WorldSnapshot (lib/worlds/worldSnapshot.ts).
+  snapshot Json
+
+  /// Hidden from the directory without being deleted, so existing forks and
+  /// links keep working and the author can relist.
+  isListed Boolean @default(true)
+
+  forkCount Int @default(0)
+  viewCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  publisher User      @relation("PublishedWorlds", fields: [publishedBy], references: [id], onDelete: Cascade)
+  source    Campaign? @relation("PublishedFrom", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+
+  // The directory's own ordering: most-forked first among listed worlds.
+  @@index([isListed, forkCount])
+  @@index([publishedBy])
+  // "Is this campaign already published?" for the publish button's state.
+  @@index([sourceCampaignId])
+  @@map("published_worlds")
+}
+
+//
+// ASYNC CAMPAIGN CREATION (#493)
+//
+// Creating a campaign made five model calls — one for the world, then four
+// in parallel for extras, move flavor, the calendar and world rules — and
+// then seeded a dozen tables, all inside the POST. The request routinely
+// ran a minute or more, the modal said "Building your world..." the whole
+// time with no idea how far along it was, and a closed tab or a timed-out
+// request lost the lot with nothing to resume.
+//
+// Same shape as ResolutionJob next door, for the same reason, with one
+// addition: a `stage`. Scene resolution is one opaque step and reports
+// start/finish; creation is five distinguishable ones, and "which of these
+// is happening" is exactly the information the modal was missing.
+//
+// `input` carries the validated creation request so the worker can run
+// without the original HTTP context. It holds no secrets — title,
+// description, universe, the chosen template and an optional lore URL, all
+// of it supplied by the user who is also the only reader of this row.
+
+enum CampaignCreationStage {
+  QUEUED
+  WORLD
+  DETAILS
+  SEEDING
+  DONE
+}
+
+model CampaignCreationJob {
+  id     String                @id @default(cuid())
+  userId String
+  status ResolutionJobStatus   @default(PENDING)
+  stage  CampaignCreationStage @default(QUEUED)
+
+  /// The validated CreateCampaignInput, minus userId. See campaignCreation.ts.
+  input Json
+
+  /// Set once the seeding transaction commits. The client navigates here.
+  campaignId String?
+
+  attempts  Int     @default(0)
+  lastError String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  user User @relation("CampaignCreationJobs", fields: [userId], references: [id], onDelete: Cascade)
+
+  // The poll is always "my newest job", and the stuck-job sweep is always
+  // "anything still running".
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("campaign_creation_jobs")
 }
 
 //

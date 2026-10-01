@@ -10,7 +10,8 @@ import { ErrorResponse } from '@/types/api'
 import { handleRouteError } from '@/lib/api/errors'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { recordEvent } from '@/lib/analytics/events'
-import { createCampaign, type ValidatedLoreImport } from '@/lib/game/campaignCreation'
+import { type ValidatedLoreImport } from '@/lib/game/campaignCreation'
+import { enqueueCampaignCreation } from '@/lib/game/campaignCreationQueue'
 
 // GET /api/campaigns - List user's campaigns
 export async function GET(request: NextRequest) {
@@ -116,20 +117,34 @@ export async function POST(request: NextRequest) {
     const resolvedUniverse = universe || template?.universe || 'Original'
     const resolvedSystemPrompt = aiSystemPrompt || template?.systemPrompt || ''
 
-    const campaign = await createCampaign({
+    // #493: enqueue rather than build.
+    //
+    // This used to run five model calls and a seeding transaction inline —
+    // a minute or more inside a request, with the client holding a spinner
+    // and no way to say how far along it was. Now it validates (above,
+    // unchanged — a bad request still fails here, immediately, rather than
+    // becoming a job that fails later) and hands the work to its own
+    // invocation.
+    //
+    // 202, not 201: nothing has been created yet. The body carries the job
+    // to poll, not a campaign.
+    const { jobId } = await enqueueCampaignCreation(user.userId, {
       title,
       description,
       initialWorldSeed,
       resolvedUniverse,
       resolvedSystemPrompt,
-      template: template || null,
+      templateId: template ? template.id : null,
       validatedLore,
-      userId: user.userId,
     })
 
-    await recordEvent('CAMPAIGN_CREATED', { userId: user.userId, campaignId: campaign.id })
+    // Recorded at the point of intent rather than completion, deliberately:
+    // this is the funnel's "they asked for a world" step, and a creation
+    // that dies in the worker is exactly the drop-off it needs to show.
+    // Completion has its own evidence — the campaign row.
+    await recordEvent('CAMPAIGN_CREATED', { userId: user.userId })
 
-    return NextResponse.json({ campaign }, { status: 201 })
+    return NextResponse.json({ jobId }, { status: 202 })
   } catch (error) {
     return handleRouteError(error, 'Create campaign error', 'Internal server error')
   }

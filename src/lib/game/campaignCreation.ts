@@ -45,10 +45,31 @@ export interface CreateCampaignInput {
   template: CampaignTemplate | null
   validatedLore: ValidatedLoreImport | null
   userId: string
+  /**
+   * #493: called as each phase begins, so the creation job can record which
+   * one is running and the modal can say something truer than "Building
+   * your world...". Optional and best-effort — reporting progress must
+   * never be able to fail a creation, so every call is swallowed.
+   *
+   * Phases, in order: WORLD (the first model call), DETAILS (the four
+   * parallel ones), SEEDING (the transaction).
+   */
+  onStage?: (stage: 'WORLD' | 'DETAILS' | 'SEEDING') => Promise<void> | void
 }
 
 export async function createCampaign(input: CreateCampaignInput) {
-  const { title, description, initialWorldSeed, resolvedUniverse, resolvedSystemPrompt, template, validatedLore, userId } = input
+  const { title, description, initialWorldSeed, resolvedUniverse, resolvedSystemPrompt, template, validatedLore, userId, onStage } = input
+
+  // Swallowed on purpose: a progress report that throws would fail a
+  // creation that was otherwise going fine, which trades the actual
+  // deliverable for a status line about it.
+  const reportStage = async (stage: 'WORLD' | 'DETAILS' | 'SEEDING') => {
+    try {
+      await onStage?.(stage)
+    } catch (error) {
+      console.error(`Failed to report creation stage ${stage} (non-critical):`, error)
+    }
+  }
 
   // Generate factions, the capability scaffold, and stat labels with AI
   // regardless of whether the user wrote their own world seed — writing
@@ -64,6 +85,7 @@ export async function createCampaign(input: CreateCampaignInput) {
   let generatedNpcs: GeneratedNPC[] | undefined
   let generatedLocations: GeneratedLocation[] | undefined
 
+  await reportStage('WORLD')
   console.log('🌍 Generating world context (factions, capabilities, stat labels, fronts)...')
   const generated = await generateWorldFromTemplate(
     template?.id || null,
@@ -99,6 +121,7 @@ export async function createCampaign(input: CreateCampaignInput) {
   let generatedMoveFlavor: GeneratedMoveFlavor[] | null = null
   let generatedCalendar: GeneratedCalendar | null = null
   let generatedWorldRules: GeneratedWorldRule[] | null = null
+  await reportStage('DETAILS')
   try {
     // Independent calls, run together: move flavor doesn't need factions/
     // capabilities as input (only stat labels), the calendar needs
@@ -137,6 +160,8 @@ export async function createCampaign(input: CreateCampaignInput) {
   // pre-existing campaign's lazy backfill also fails to generate one (see
   // lib/game/calendarBackfill.ts).
   const resolvedCalendar = generatedCalendar || DEFAULT_CALENDAR
+
+  await reportStage('SEEDING')
 
   // Create campaign, world meta, membership, and template data in one transaction
   const campaign = await prisma.$transaction(async (tx) => {

@@ -279,6 +279,7 @@ model User {
   playerActions       PlayerAction[]
   createInvites       CampaignInvite[]     @relation("InviteCreator")
   receivedInvites     CampaignInvite[]     @relation("InviteRecipient")
+  creationJobs        CampaignCreationJob[] @relation("CampaignCreationJobs")
   diceRolls           DiceRoll[]
   gmClarifications    GmClarification[]
 
@@ -3702,6 +3703,63 @@ model Friendship {
   @@index([user1Id])
   @@index([user2Id])
   @@map("friendships")
+}
+
+//
+// ASYNC CAMPAIGN CREATION (#493)
+//
+// Creating a campaign made five model calls — one for the world, then four
+// in parallel for extras, move flavor, the calendar and world rules — and
+// then seeded a dozen tables, all inside the POST. The request routinely
+// ran a minute or more, the modal said "Building your world..." the whole
+// time with no idea how far along it was, and a closed tab or a timed-out
+// request lost the lot with nothing to resume.
+//
+// Same shape as ResolutionJob next door, for the same reason, with one
+// addition: a `stage`. Scene resolution is one opaque step and reports
+// start/finish; creation is five distinguishable ones, and "which of these
+// is happening" is exactly the information the modal was missing.
+//
+// `input` carries the validated creation request so the worker can run
+// without the original HTTP context. It holds no secrets — title,
+// description, universe, the chosen template and an optional lore URL, all
+// of it supplied by the user who is also the only reader of this row.
+
+enum CampaignCreationStage {
+  QUEUED
+  WORLD
+  DETAILS
+  SEEDING
+  DONE
+}
+
+model CampaignCreationJob {
+  id     String                @id @default(cuid())
+  userId String
+  status ResolutionJobStatus   @default(PENDING)
+  stage  CampaignCreationStage @default(QUEUED)
+
+  /// The validated CreateCampaignInput, minus userId. See campaignCreation.ts.
+  input Json
+
+  /// Set once the seeding transaction commits. The client navigates here.
+  campaignId String?
+
+  attempts  Int     @default(0)
+  lastError String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  user User @relation("CampaignCreationJobs", fields: [userId], references: [id], onDelete: Cascade)
+
+  // The poll is always "my newest job", and the stuck-job sweep is always
+  // "anything still running".
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("campaign_creation_jobs")
 }
 
 //

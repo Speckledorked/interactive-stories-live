@@ -44,6 +44,51 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    id: 'worlds-you-can-hand-to-someone-else',
+    version: '1.2',
+    date: '2026-10-01',
+    title: 'Worlds you can hand to someone else',
+    body: [
+      'Until now every world started from nothing, alone. The only settings on offer were the handful that shipped with MythOS, and anything you built was yours and nobody else\'s — there was no way to let a friend, or a stranger, start from it.',
+      'You can now publish a world you have made. It appears in a public list anyone can browse without an account, and anyone who likes the look of it can take their own copy in a single step: the same powers, the same factions, the same calendar, the same situation at the opening. Their copy is theirs. Nothing they do in it reaches your game, and nothing you do afterwards reaches theirs.',
+      'What gets shared is the setting, never your table. Your scenes, your characters, what anyone said, what anyone rolled, your private notes: none of it is published, and none of it is in the copy somebody else takes. If you want people to read your actual story, that is what the chronicle link has always been for — and a chronicle now offers its readers a way into the world it describes, instead of ending on a full stop.',
+      'Publishing is yours to undo. Taking a world back off the list leaves it working for anyone who already has the link or has already started from it, and you can put it back any time.',
+    ],
+  },
+  {
+    id: 'building-a-world-says-what-it-is-doing',
+    version: '1.2',
+    date: '2026-10-01',
+    title: 'Making a world tells you what it is doing',
+    body: [
+      'Starting a campaign used to sit on "Building your world…" for a long, silent minute while a great deal happened that you could not see. If your connection dropped, or you closed the tab, or it simply took too long, the whole thing was lost and you began again from the form.',
+      'It now works in the background and says which part it is on — drawing the map and deciding who holds it, settling the calendar and the customs, putting everyone where they belong. If it takes longer than it should, it carries on without you and the world turns up in your campaigns when it is ready rather than vanishing.',
+      'Starting from a world somebody else published skips all of this. That work was already done once, by them, so your copy arrives more or less immediately.',
+    ],
+  },
+  {
+    id: 'invite-the-people-you-already-know',
+    version: '1.2',
+    date: '2026-10-01',
+    title: 'Invite the people you already know',
+    body: [
+      'MythOS knew who your friends were and could do nothing with it. Inviting someone to a campaign meant making a link and then finding somewhere else — a chat, a message, an email — to send it to them.',
+      'You can now invite a friend from inside the campaign, and they get the invitation here. It is addressed to them and only works for them, which is why it is safe to deliver this way where a copyable link would not be.',
+      'Inviting the same person twice sends the nudge again rather than leaving two live invitations lying around, and someone you have barred from a campaign stays barred — an invitation is not a way back in.',
+    ],
+  },
+  {
+    id: 'a-letter-when-you-have-been-away',
+    version: '1.2',
+    date: '2026-10-01',
+    title: 'A letter when you have been away a while',
+    body: [
+      'Your worlds have always kept turning while you were gone, and MythOS has always been able to tell you what happened when you came back. It just never went and told you there was anything to come back to.',
+      'If you have been away from a campaign for a good while and something real has happened in it, you will get one letter saying what. Not a reminder that the app exists — the actual events, the same ones the lobby would show you on your return, and only the ones your character could have heard about.',
+      'It will not write to you if nothing happened, it will not write often, and it stops writing if you do not come back. You can turn it off entirely under notification settings, and you can do that before ever receiving one.',
+    ],
+  },
+  {
     id: 'a-world-that-argues-with-itself',
     version: '1.1',
     date: '2026-09-29',

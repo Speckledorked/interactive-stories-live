@@ -1,6 +1,6 @@
 // src/lib/ai/__tests__/worldGenerator.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { generateWorldFromTemplate } from '../worldGenerator'
+import { generateWorldFromTemplate, NO_LORE_RESPONSE_FLOOR_TOKENS } from '../worldGenerator'
 
 function mockCompletion(content: object) {
   return vi.fn().mockResolvedValue({
@@ -261,5 +261,116 @@ describe('generateWorldFromTemplate', () => {
       const body = JSON.parse((fetchSpy.mock.calls[0][1] as any).body)
       expect(body.messages[1].content).not.toMatch(/HARD REQUIREMENT/)
     })
+  })
+})
+
+// ── The token budget, and the silence ────────────────────────────────────
+//
+// Both halves of a real production bug. The no-lore budget was 1300 against
+// a prompt that asks for well over 2000 tokens' worth of JSON, so every
+// response richer than the barest possible one truncated, JSON.parse threw,
+// and the catch returned null. Campaign creation reads null as "no world was
+// generated" and seeds the canned template instead — so four of the six
+// worlds real people built came out as the same three stock factions, while
+// the two lore-backed ones (on the larger budget) generated properly.
+//
+// It survived three months because the only trace was a console line. A
+// campaign silently built from stock content is indistinguishable, to the
+// person who made it, from one the generator simply declined to improve on.
+
+describe('the response budget covers what the prompt asks for', () => {
+  /** Read the budget the call actually asked for. */
+  async function budgetFor(opts: { lore?: string }): Promise<number> {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    const fetchSpy = mockCompletion({
+      world_seed: 'x',
+      factions: [{ name: 'F', description: 'd', goals: 'g', current_plan: 'p' }],
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await generateWorldFromTemplate('pbta-fantasy', 'T', 'd', undefined, undefined, opts.lore)
+
+    return JSON.parse((fetchSpy.mock.calls[0][1] as any).body).max_tokens
+  }
+
+  it('asks for more than a fully conforming no-lore response needs', async () => {
+    // NO_LORE_RESPONSE_FLOOR_TOKENS is priced from the prompt's own stated
+    // ranges, at the TOP of each — a budget that only fits the minimum
+    // conforming answer fails on every good one, which is precisely what
+    // 1300 did.
+    expect(await budgetFor({})).toBeGreaterThan(NO_LORE_RESPONSE_FLOOR_TOKENS)
+  })
+
+  it('still asks for more again when canon lore is in the prompt', async () => {
+    // Lore widens the ask (more factions allowed, canon names to carry).
+    const [withLore, without] = [await budgetFor({ lore: 'canon excerpt' }), await budgetFor({})]
+    expect(withLore).toBeGreaterThan(without)
+  })
+})
+
+describe('a failed generation is never silent', () => {
+  it('reports a truncated or malformed response rather than only logging it', async () => {
+    // The exact production failure: a response cut off mid-JSON. Returning
+    // null here is a legitimate fallback and an illegitimate silence — the
+    // campaign gets stock content and nobody finds out.
+    const reportError = vi.fn()
+    vi.doMock('@/lib/monitoring', () => ({ reportError }))
+    vi.resetModules()
+    const { generateWorldFromTemplate: gen } = await import('../worldGenerator')
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      // Truncated mid-array, as a budget overrun actually arrives.
+      json: async () => ({ choices: [{ message: { content: '{"world_seed":"x","factions":[{"name":"F"' } }] }),
+    }))
+
+    expect(await gen('pbta-fantasy', 'T', 'd')).toBeNull()
+    expect(reportError).toHaveBeenCalledWith(
+      'world-generation-parse-or-throw',
+      expect.anything(),
+      expect.objectContaining({ hasLore: 'no' })
+    )
+
+    vi.doUnmock('@/lib/monitoring')
+    vi.resetModules()
+  })
+
+  it('reports a well-formed response that is missing the fields creation needs', async () => {
+    const reportError = vi.fn()
+    vi.doMock('@/lib/monitoring', () => ({ reportError }))
+    vi.resetModules()
+    const { generateWorldFromTemplate: gen } = await import('../worldGenerator')
+
+    vi.stubEnv('OPENAI_API_KEY', 'test-key')
+    vi.stubGlobal('fetch', mockCompletion({ prose: 'the model answered in the wrong shape' }))
+
+    expect(await gen('pbta-fantasy', 'T', 'd')).toBeNull()
+    expect(reportError).toHaveBeenCalledWith(
+      'world-generation-bad-shape',
+      expect.anything(),
+      expect.anything()
+    )
+
+    vi.doUnmock('@/lib/monitoring')
+    vi.resetModules()
+  })
+
+  it('does not report the one failure that is not a failure — no API key', async () => {
+    // No key configured is a deployment state, not a malfunction. Alerting
+    // on it would make the channel noise and train everyone to ignore it.
+    const reportError = vi.fn()
+    vi.doMock('@/lib/monitoring', () => ({ reportError }))
+    vi.resetModules()
+    const { generateWorldFromTemplate: gen } = await import('../worldGenerator')
+
+    vi.stubEnv('OPENAI_API_KEY', '')
+    vi.stubGlobal('fetch', vi.fn())
+
+    expect(await gen('pbta-fantasy', 'T', 'd')).toBeNull()
+    expect(reportError).not.toHaveBeenCalled()
+
+    vi.doUnmock('@/lib/monitoring')
+    vi.resetModules()
   })
 })

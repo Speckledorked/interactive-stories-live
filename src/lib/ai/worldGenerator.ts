@@ -105,6 +105,37 @@ interface GeneratedWorld {
   fronts: GeneratedFront[]
 }
 
+/**
+ * The size of a fully conforming no-lore response, priced from the rules
+ * this file's own prompt states, in tokens.
+ *
+ * Exists to stop the budget above being set below what is actually being
+ * asked for. It was, for months: 1300 against an ask that prices out past
+ * 2000, so every response richer than the barest possible one truncated and
+ * the campaign silently got the canned template instead.
+ *
+ * Priced at the TOP of each stated range, because the ceiling is what the
+ * budget has to clear — a budget that only fits the minimum conforming
+ * answer fails on every good one:
+ *
+ *   world_seed      250 words at ~1.3 tokens/word        ~325
+ *   factions        4 x (name, description, goals,
+ *                   current_plan, 3 numbers, keys)       ~480
+ *   capabilities    5 domains x 4 x (name, description,
+ *                   tier, is_secret, requires, keys)    ~1000
+ *   domain wrappers 5 x (domain name + keys)               ~75
+ *   stat_labels     5 x (label, description, keys)        ~150
+ *   fronts          3 x (name, description, category,
+ *                   max_ticks, consequence, source)      ~270
+ *                                                       ------
+ *                                                        ~2300
+ *
+ * Approximate on purpose. It is a lower bound on the budget, not a
+ * prediction of any one response, and the guard below leaves headroom above
+ * it rather than fitting it exactly.
+ */
+export const NO_LORE_RESPONSE_FLOOR_TOKENS = 2300
+
 const GENRE_HINTS: Record<string, string> = {
   'pbta-fantasy':         'High fantasy. Dungeons, ruins, magic, rival factions, ancient threats.',
   'mha-ua-arc':           'Modern superhero academy. Quirks, villain organizations, hero rankings, public safety.',
@@ -233,12 +264,34 @@ Rules:
       // more grounding material should be able to surface more of what's
       // actually in the lore, not just better-flavored versions of the
       // same amount.
-      maxTokens: loreDigest ? 4200 : 1300,
+      //
+      // The no-lore budget was 1300, and that was the bug. The rules above
+      // ask, without any lore at all, for a 150-250 word world_seed, 2-4
+      // factions with four prose fields each, 3-5 capability domains of 2-4
+      // capabilities, five renamed stats and 1-3 fronts. Priced out
+      // (NO_LORE_RESPONSE_FLOOR_TOKENS below, which a test keeps honest),
+      // a fully conforming response runs past 2000 tokens and 1300 only
+      // covered the barest possible one. Anything richer truncated,
+      // JSON.parse threw, and the catch returned null — which creation
+      // reads as "generation declined" and silently seeds the canned
+      // template instead. Four of the six worlds real people made came out
+      // as the same three stock factions for exactly this reason, while the
+      // two lore-backed ones (on the 4200 budget) generated properly.
+      //
+      // 3200 rather than a tighter fit: it is the budget this file already
+      // used for the lore path before #-era tuning raised that to 4200, so
+      // it is a figure a response of this shape has been served by before,
+      // and it leaves room above the priced ceiling rather than sitting on
+      // it. The ceiling is a floor on the BUDGET, never a cap on the ask.
+      maxTokens: loreDigest ? 4200 : 3200,
       jsonMode: true,
     })
 
     if (!result.ok) {
-      console.error('World generation API error:', result.status)
+      await reportGenerationFailure('api-error', new Error(`status ${result.status}`), {
+        templateId: templateId ?? undefined,
+        hasLore: loreDigest ? 'yes' : 'no',
+      })
       return null
     }
 
@@ -246,7 +299,11 @@ Rules:
 
     // Validate and normalise
     if (!raw.world_seed || !Array.isArray(raw.factions)) {
-      console.error('World generation returned unexpected shape:', Object.keys(raw))
+      await reportGenerationFailure(
+        'bad-shape',
+        new Error(`missing world_seed or factions; got keys: ${Object.keys(raw).join(',')}`),
+        { templateId: templateId ?? undefined, hasLore: loreDigest ? 'yes' : 'no' }
+      )
       return null
     }
 
@@ -360,7 +417,44 @@ Rules:
     return { worldSeed: String(raw.world_seed), factions, capabilities, statLabels, fronts }
 
   } catch (err) {
-    console.error('World generation failed, using template defaults:', err)
+    // The truncation path. A response cut off mid-JSON throws here, and
+    // returning null is read by creation as "no world was generated" —
+    // which it answers by seeding the canned template. That is a
+    // reasonable fallback and a terrible silence: a campaign built from
+    // stock content looks, to the person who made it, exactly like one the
+    // generator declined to improve on. Four of six real worlds came out
+    // that way over three months and the only trace was a console line.
+    await reportGenerationFailure('parse-or-throw', err, {
+      templateId: templateId ?? undefined,
+      hasLore: loreDigest ? 'yes' : 'no',
+    })
     return null
+  }
+}
+
+/**
+ * One place for every way this call can fail, so the fallback stops being
+ * invisible.
+ *
+ * reportError rather than logValidationFailure: that recorder needs a
+ * campaignId, and generation runs BEFORE the campaign row exists, so there
+ * is nothing to attach a row to. This is the same channel the unattended
+ * daily cron already uses for exactly this problem — work nobody is
+ * watching that must not fail quietly.
+ *
+ * Swallows its own errors. Alerting about a failed generation must never be
+ * the reason a creation that was going to fall back gracefully instead
+ * throws.
+ */
+async function reportGenerationFailure(
+  kind: 'api-error' | 'bad-shape' | 'parse-or-throw',
+  error: unknown,
+  extra: Record<string, string | undefined>
+): Promise<void> {
+  try {
+    const { reportError } = await import('@/lib/monitoring')
+    await reportError(`world-generation-${kind}`, error, extra)
+  } catch (reportingError) {
+    console.error('Failed to report world-generation failure:', reportingError)
   }
 }

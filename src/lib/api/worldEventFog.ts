@@ -24,31 +24,28 @@
 // both were exactly the defect the shared table exists to prevent. The
 // mapping is now read, not restated.
 //
-// One known divergence remains, and it is the shared table's rather than
-// this file's: CLOCK is absent from it, so a hidden clock's tick reaches
-// every player-facing reader of WorldEvent. Clocks do model concealment
-// (Clock.isHidden, inverted polarity — see visibility.ts). That is a
-// pre-existing leak in three surfaces, not something to fork a fourth
-// answer over, so it is raised separately rather than fixed here.
+// #524 fixed the one divergence that was left: CLOCK was absent from the
+// shared table, so a hidden clock's tick reached every player-facing
+// reader of WorldEvent. It is gated there now, which is why the ids below
+// are built by iterating that table rather than naming three models.
 
 import { prisma } from '@/lib/prisma'
-import { DISCOVERY_SOURCE_BY_ENTITY_TYPE } from '@/lib/notifications/world-digest'
-import { visibleTo, isCampaignAdmin, type CampaignRole } from './visibility'
+import {
+  DISCOVERY_SOURCE_BY_ENTITY_TYPE,
+  DISCOVERY_SOURCE_MODELS,
+} from '@/lib/notifications/world-digest'
+import {
+  visibleTo,
+  isCampaignAdmin,
+  FOG_PRISMA_MODEL,
+  type CampaignRole,
+  type FogGatedModel,
+} from './visibility'
 
 /** The shape this filter needs off a WorldEvent row. */
 export interface FogGatedEvent {
   targetType: string
   targetId: string
-}
-
-type DiscoverySource = (typeof DISCOVERY_SOURCE_BY_ENTITY_TYPE)[keyof typeof DISCOVERY_SOURCE_BY_ENTITY_TYPE]
-
-/** Which fog-gated model each discovery source resolves through. The
- *  Prisma accessor and the visibleTo() model name differ only for NPC. */
-const FOG_MODEL: Record<DiscoverySource, 'npc' | 'faction' | 'location'> = {
-  nPC: 'npc',
-  faction: 'faction',
-  location: 'location',
 }
 
 /**
@@ -68,33 +65,31 @@ export async function buildWorldEventFog(
   if (isCampaignAdmin(role)) return () => true
 
   // Id-only selects: this is a membership test, and pulling whole rows to
-  // answer it would be the expensive way to ask.
-  const [factions, npcs, locations] = await Promise.all([
-    prisma.faction.findMany({
-      where: { campaignId, ...visibleTo('faction', role) },
-      select: { id: true },
-    }),
-    prisma.nPC.findMany({
-      where: { campaignId, ...visibleTo('npc', role) },
-      select: { id: true },
-    }),
-    prisma.location.findMany({
-      where: { campaignId, ...visibleTo('location', role) },
-      select: { id: true },
-    }),
-  ])
+  // answer it would be the expensive way to ask. Driven off the shared
+  // table's own model list, so a type added to the gate brings its ids
+  // with it instead of silently failing a lookup in an absent set.
+  const idSets = await Promise.all(
+    DISCOVERY_SOURCE_MODELS.map((model) =>
+      (
+        prisma[FOG_PRISMA_MODEL[model]] as {
+          findMany: (args: unknown) => Promise<Array<{ id: string }>>
+        }
+      ).findMany({
+        where: { campaignId, ...visibleTo(model, role) },
+        select: { id: true },
+      })
+    )
+  )
 
-  const visibleIds: Record<'npc' | 'faction' | 'location', Set<string>> = {
-    faction: new Set(factions.map((r) => r.id)),
-    npc: new Set(npcs.map((r) => r.id)),
-    location: new Set(locations.map((r) => r.id)),
-  }
+  const visibleIds = new Map<FogGatedModel, Set<string>>(
+    DISCOVERY_SOURCE_MODELS.map((model, i) => [model, new Set(idSets[i].map((r) => r.id))])
+  )
 
   return (event: FogGatedEvent) => {
-    const source = (DISCOVERY_SOURCE_BY_ENTITY_TYPE as Record<string, DiscoverySource | undefined>)[
+    const model = (DISCOVERY_SOURCE_BY_ENTITY_TYPE as Record<string, FogGatedModel | undefined>)[
       event.targetType
     ]
-    if (!source) return true
-    return visibleIds[FOG_MODEL[source]].has(event.targetId)
+    if (!model) return true
+    return visibleIds.get(model)?.has(event.targetId) ?? false
   }
 }

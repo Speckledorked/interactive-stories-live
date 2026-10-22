@@ -41,8 +41,11 @@
 
 import { prisma } from '@/lib/prisma'
 import { buildAbsenceJournal, MAX_JOURNAL_ENTRIES, type AbsenceJournal } from './absenceJournal'
-import { DISCOVERY_GATED_ENTITY_TYPES } from '@/lib/notifications/world-digest'
-import { visibleTo, type CampaignRole } from '@/lib/api/visibility'
+import {
+  DISCOVERY_GATED_ENTITY_TYPES,
+  DISCOVERY_SOURCE_MODELS,
+} from '@/lib/notifications/world-digest'
+import { visibleTo, FOG_PRISMA_MODEL, type CampaignRole } from '@/lib/api/visibility'
 
 /**
  * How many raw WorldEvent rows one reconstruction reads before selecting.
@@ -76,7 +79,19 @@ export async function loadAbsenceJournal(
   role: CampaignRole
 ): Promise<AbsenceJournal> {
   const scanWhere = { campaignId, createdAt: { gt: since } }
-  const [events, discoveredFactions, discoveredNpcs] = await Promise.all([
+
+  // #524: the id set is built by iterating the SAME table the gate is
+  // derived from, rather than naming models by hand.
+  //
+  // It used to be factions and NPCs only, while the gate
+  // (DISCOVERY_GATED_ENTITY_TYPES) already covered the four LOCATION*
+  // types — so every location event was tested against a set that could
+  // never contain a location id, and all of them were dropped. That is
+  // #432's blackout, alive in this file: the module doc above complains
+  // that weather was unreconstructible from any player surface, and it
+  // still was, here, for this reason. The same change gates clocks, which
+  // were passing through unfiltered in the other direction.
+  const [events, ...idSets] = await Promise.all([
     prisma.worldEvent.findMany({
       where: scanWhere,
       orderBy: [{ turnNumber: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
@@ -87,11 +102,16 @@ export async function loadAbsenceJournal(
         significant: true, importance: true,
       },
     }),
-    prisma.faction.findMany({ where: { campaignId, ...visibleTo('faction', role) }, select: { id: true } }),
-    prisma.nPC.findMany({ where: { campaignId, ...visibleTo('npc', role) }, select: { id: true } }),
+    ...DISCOVERY_SOURCE_MODELS.map((model) =>
+      (
+        prisma[FOG_PRISMA_MODEL[model]] as {
+          findMany: (args: unknown) => Promise<Array<{ id: string }>>
+        }
+      ).findMany({ where: { campaignId, ...visibleTo(model, role) }, select: { id: true } })
+    ),
   ])
 
-  const discoveredIds = new Set([...discoveredFactions, ...discoveredNpcs].map((e) => e.id))
+  const discoveredIds = new Set(idSets.flat().map((e) => e.id))
   const gated = new Set<string>(DISCOVERY_GATED_ENTITY_TYPES)
   const visible = events.filter((e) => (gated.has(e.targetType) ? discoveredIds.has(e.targetId) : true))
 

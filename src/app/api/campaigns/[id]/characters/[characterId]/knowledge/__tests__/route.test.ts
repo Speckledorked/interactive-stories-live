@@ -160,6 +160,49 @@ describe('GET', () => {
     expect(body.firsthand).toHaveLength(1)
   })
 
+  it("does not reveal a thread the GM has not revealed", async () => {
+    // #524: CLOCK was absent from the shared gating table, so a hidden
+    // clock's tick reached players by name. Clocks gate on isHidden —
+    // inverted polarity — which is why the predicate has to come from
+    // visibleTo() rather than a literal.
+    db.clock.findMany.mockResolvedValue([])
+    db.eventWitness.findMany.mockResolvedValue([
+      witnessRow({
+        worldEvent: {
+          type: 'clock.currentTicks',
+          targetType: 'CLOCK',
+          targetId: 'clock1',
+          targetName: 'The Choir Awakens',
+          previousValue: '2',
+          newValue: '3',
+        },
+      }),
+    ])
+    const body = await (await GET(request(), params)).json()
+    expect(body.firsthand).toEqual([])
+  })
+
+  it('does show a thread the party can see', async () => {
+    // The gate is a gate, not a blackout — the failure mode #432 created
+    // for locations by gating a type whose ids were never in the set.
+    db.clock.findMany.mockResolvedValue([{ id: 'clock1' }])
+    db.eventWitness.findMany.mockResolvedValue([
+      witnessRow({
+        worldEvent: {
+          type: 'clock.currentTicks',
+          targetType: 'CLOCK',
+          targetId: 'clock1',
+          targetName: 'The Choir Awakens',
+          previousValue: '2',
+          newValue: '3',
+        },
+      }),
+    ])
+    const body = await (await GET(request(), params)).json()
+    expect(body.firsthand).toHaveLength(1)
+    expect(body.firsthand[0].text).toBe('The Choir Awakens has drawn closer.')
+  })
+
   it('splits what was witnessed from what was merely heard', async () => {
     db.eventWitness.findMany.mockResolvedValue([
       witnessRow({ grade: 'WITNESSED', turnNumber: 9 }),

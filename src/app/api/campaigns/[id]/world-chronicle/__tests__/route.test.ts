@@ -14,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
     faction: { findMany: vi.fn() },
     nPC: { findMany: vi.fn() },
     location: { findMany: vi.fn() },
+    clock: { findMany: vi.fn() },
   },
 }))
 
@@ -53,6 +54,7 @@ beforeEach(() => {
   db.faction.findMany.mockResolvedValue([{ id: 'f1' }])
   db.nPC.findMany.mockResolvedValue([])
   db.location.findMany.mockResolvedValue([])
+  db.clock.findMany.mockResolvedValue([])
 })
 
 describe('GET', () => {

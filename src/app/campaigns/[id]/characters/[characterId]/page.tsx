@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, setLastCampaignId } from '@/lib/clientAuth'
 import CharacterSheetDisplay from '@/components/character/CharacterSheetDisplay'
+import CharacterKnowledgePanel from '@/components/character/CharacterKnowledgePanel'
 import { pusherClient } from '@/lib/pusher'
 import { Home, Scroll, User } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -214,6 +215,11 @@ export default function CharacterPage() {
           onAdvanceDowntimeTime={handleAdvanceDowntimeTime}
           onRespondToDowntimeEvent={handleRespondToDowntimeEvent}
         />
+
+        {/* #520: information latency, finally readable. Self-fetching and
+            owner-scoped — see the component for why it is not a prop on
+            the sheet above. Renders nothing when there is nothing known. */}
+        <CharacterKnowledgePanel campaignId={campaignId} characterId={characterId} />
       </main>
 
       <TavernNav campaignId={campaignId} />

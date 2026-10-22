@@ -151,7 +151,7 @@ export function locationConnectionsFor(
     toLocationId: string
     isBlockaded: boolean
   }>,
-  flights: Array<{ toLocationId: string; toLocationName: string }>,
+  flights: Array<{ toLocationId: string }>,
   visibleLocationNameById: Map<string, string>
 ): LocationConnections {
   const entries: SupplyRouteEntry[] = []
@@ -169,10 +169,10 @@ export function locationConnectionsFor(
   // they could know, and claiming otherwise either way would be a guess.
   const cutOff = entries.length > 0 && entries.every((r) => r.blockaded)
 
-  // Flight rows carry a denormalized destination name, but it is resolved
-  // through the fog index anyway — the row was written when the place may
-  // have been visible, and reading the stored name directly would be a
-  // way around the filter.
+  // Flight rows carry a denormalized destination name (toLocationName).
+  // It is deliberately neither taken nor selected: the row was written
+  // when the place may have been visible, so reading the stored name
+  // would be a way around the fog. The id is resolved through the index.
   const fleeingTo: string[] = []
   for (const flight of flights) {
     const name = visibleLocationNameById.get(flight.toLocationId)

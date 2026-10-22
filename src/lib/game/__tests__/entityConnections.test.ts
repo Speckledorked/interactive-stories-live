@@ -137,17 +137,15 @@ describe('locationConnectionsFor', () => {
     expect(locationConnectionsFor('loc-keep', [], [], visible).cutOff).toBe(false)
   })
 
-  it('resolves flight destinations through the fog rather than trusting the stored name', () => {
-    // The row denormalizes toLocationName at write time, when the place
-    // may have been visible. Reading it directly would be a way around
-    // the filter.
+  it('names a flight destination only when it is still visible', () => {
+    // The row also stores toLocationName, denormalized at write time when
+    // the place may have been visible. This signature does not accept it,
+    // and the route does not select it — the id goes through the fog
+    // index, so an undiscovered destination cannot be named.
     const result = locationConnectionsFor(
       'loc-keep',
       [],
-      [
-        { toLocationId: 'loc-mill', toLocationName: 'Sutter Mill' },
-        { toLocationId: 'loc-secret', toLocationName: 'The Hidden Vault' },
-      ],
+      [{ toLocationId: 'loc-mill' }, { toLocationId: 'loc-secret' }],
       visible
     )
     expect(result.fleeingTo).toEqual(['Sutter Mill'])
@@ -157,10 +155,7 @@ describe('locationConnectionsFor', () => {
     const result = locationConnectionsFor(
       'loc-keep',
       [],
-      [
-        { toLocationId: 'loc-mill', toLocationName: 'Sutter Mill' },
-        { toLocationId: 'loc-mill', toLocationName: 'Sutter Mill' },
-      ],
+      [{ toLocationId: 'loc-mill' }, { toLocationId: 'loc-mill' }],
       visible
     )
     expect(result.fleeingTo).toEqual(['Sutter Mill'])

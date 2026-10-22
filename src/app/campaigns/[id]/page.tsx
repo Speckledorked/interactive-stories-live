@@ -511,6 +511,15 @@ export default function CampaignLobbyPage() {
                 )
               })}
             </div>
+            {/* #522: "What Changed" above is bounded to this absence and
+                capped at twelve. The chronicle is the same record without
+                either bound, for a reader who wants to page back. */}
+            <Link
+              href={`/campaigns/${campaignId}/chronicle`}
+              className="inline-flex min-h-[44px] items-center text-sm text-myth-ink-faint hover:text-myth-ink hover:underline"
+            >
+              Read the whole chronicle
+            </Link>
           </div>
         )}
 

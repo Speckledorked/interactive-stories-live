@@ -396,7 +396,12 @@ async function attachEntityConnections<T extends { entryType: string; name: stri
           where: { campaignId, fromLocationId: { in: locationIds } },
           orderBy: { turnNumber: 'desc' },
           take: RECENT_FLIGHT_ROWS,
-          select: { fromLocationId: true, toLocationId: true, toLocationName: true },
+          // toLocationName is NOT selected. The row denormalizes it at
+          // write time, when the place may have been visible, so the
+          // destination is resolved through the fog index instead — see
+          // entityConnections.ts. Selecting a name nothing may render is
+          // how it ends up rendered.
+          select: { fromLocationId: true, toLocationId: true },
         })
       : [],
   ])

@@ -69,6 +69,17 @@ describe('player-facing surfaces render bands, not raw simulation values', () =>
     expect(source).not.toMatch(/display=\{`\$\{[^}]+\}\/\d+`\}/)
     expect(source).toMatch(/display=\{describeStability\(stats\.conditionScore\)\}/)
   })
+
+  it("EntityConnectionRow renders a debt's band and never its amount", () => {
+    // #521: FactionDebt.amount ships only for an ADMIN (entityConnections.ts
+    // follows #389's doctrine), and the payload reaching a player carries
+    // null. Nothing should render the field in either case — an admin
+    // debugging the economy has the tick log, and a component that reads
+    // `.amount` is one role check away from printing it to everyone.
+    const source = read('components/wiki/EntityConnectionRow.tsx')
+    expect(source).not.toMatch(/\.amount/)
+    expect(source).toMatch(/\.weight/)
+  })
 })
 
 describe('Clocks are called Threads on every player-facing surface', () => {

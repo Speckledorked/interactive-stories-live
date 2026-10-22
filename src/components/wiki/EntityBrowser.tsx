@@ -33,6 +33,7 @@ import { TavernHeader } from '@/components/tavern/TavernHeader'
 import { TavernNav } from '@/components/tavern/TavernNav'
 import { SubNavTabs } from '@/components/ui/SubNavTabs'
 import { EntityStatRow } from './EntityStatRow'
+import { EntityConnectionRow } from './EntityConnectionRow'
 import { SectionHeader } from '@/components/ui/section-header'
 import { groupWikiEntriesByCategory } from '@/lib/wikiCategoryGrouping'
 import { Button } from '@/components/ui/button'
@@ -399,6 +400,11 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
                               Codex card — the prose above is the same on
                               both. */}
                           {entry.stats && <EntityStatRow stats={entry.stats} />}
+                          {/* #521: the relational half — ties, debts,
+                              supply, flight. Null when the entity has
+                              none on record, which is most of them in a
+                              young campaign. */}
+                          {entry.connections && <EntityConnectionRow connections={entry.connections} />}
                           {entry.lastSeenTurn && (
                             <p className="mt-2 flex items-center gap-2 text-xs text-myth-ink-faint">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,6 +462,13 @@ export function EntityBrowser({ tabs, title, intro, basePath, redirectTypes }: E
                 <div className="mb-4">
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Current State</h3>
                   <EntityStatRow stats={selectedEntry.stats} />
+                </div>
+              )}
+
+              {selectedEntry.connections && (
+                <div className="mb-4">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-myth-ink-faint">Connections</h3>
+                  <EntityConnectionRow connections={selectedEntry.connections} />
                 </div>
               )}
 

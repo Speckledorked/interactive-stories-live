@@ -7,6 +7,24 @@ import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { summarizeNpcRelationship, type NpcRelationshipValues } from '@/lib/game/npcRelationship'
 import { deriveConditionTags } from '@/lib/game/tick/locationConditionTick'
 import { factionStatsFor, locationStatsFor, type EntityStats } from '@/lib/game/entityStats'
+import { TIE_INCLUDE, npcTies } from '@/lib/game/tieGraph'
+import {
+  npcConnectionsFor,
+  factionConnectionsFor,
+  locationConnectionsFor,
+  type EntityConnections,
+  type TieKind,
+} from '@/lib/game/entityConnections'
+
+/**
+ * How many recent flight rows to consider across the whole campaign.
+ *
+ * migrationTick writes one row per fleeing group per turn, so this table
+ * only grows. The card wants "where are people going now", and a bound an
+ * order of magnitude above the number of locations a campaign has is
+ * plenty for that while keeping the read flat as a campaign ages.
+ */
+const RECENT_FLIGHT_ROWS = 50
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -284,6 +302,151 @@ async function attachEntityStats<T extends { entryType: string; name: string }>(
   })
 }
 
+/**
+ * Attaches `connections: EntityConnections` to NPC / FACTION / LOCATION
+ * entries — the relational state the tick moves each turn, which until
+ * #521 had no route and no component anywhere: NpcTie, FactionDebt,
+ * SupplyRoute and PopulationFlightEvent.
+ *
+ * Mirrors attachEntityStats above in every structural respect — matched to
+ * the real row by name, re-runs the role-aware visibility filter rather
+ * than trusting the caller, never selects gmNotes, and skips each query
+ * entirely when the requested type excludes it.
+ *
+ * The fog pass here is doubled on purpose, and it is the part worth
+ * reading twice. These are EDGES, so an entry surviving the filter says
+ * nothing about the thing at the other end: a discovered NPC can be allied
+ * to one the party has never met, and a discovered location can be
+ * supplied from a hidden one. Every far endpoint is resolved through a
+ * visible-name index and dropped when it misses — see entityConnections.ts
+ * on why dropped rather than anonymised.
+ */
+async function attachEntityConnections<T extends { entryType: string; name: string }>(
+  campaignId: string,
+  isAdmin: boolean,
+  entries: T[]
+): Promise<Array<T & { connections?: EntityConnections }>> {
+  const present = (type: string) => entries.some((e) => e.entryType === type)
+  if (!present('NPC') && !present('FACTION') && !present('LOCATION')) return entries
+
+  const role = isAdmin ? 'ADMIN' : 'PLAYER'
+
+  const [npcs, factions, locations] = await Promise.all([
+    present('NPC')
+      ? prisma.nPC.findMany({
+          where: { campaignId, ...visibleTo('npc', role) },
+          select: { id: true, name: true, ...TIE_INCLUDE },
+        })
+      : [],
+    present('FACTION')
+      ? prisma.faction.findMany({
+          where: { campaignId, ...visibleTo('faction', role) },
+          select: { id: true, name: true },
+        })
+      : [],
+    present('LOCATION')
+      ? prisma.location.findMany({
+          where: { campaignId, ...visibleTo('location', role) },
+          select: { id: true, name: true },
+        })
+      : [],
+  ])
+
+  // Visible-name indexes for the FAR end of every edge.
+  const npcNameById = new Map(npcs.map((n) => [n.id, n.name]))
+  const factionNameById = new Map(factions.map((f) => [f.id, f.name]))
+  const locationNameById = new Map(locations.map((l) => [l.id, l.name]))
+
+  const factionIds = factions.map((f) => f.id)
+  const locationIds = locations.map((l) => l.id)
+
+  const [debts, routes, flights] = await Promise.all([
+    // Only OUTSTANDING: a settled debt is history, and the card is about
+    // where a faction stands now. economyTick zeroes the amount and flips
+    // the status together, so filtering on status is the stable predicate.
+    factionIds.length > 0
+      ? prisma.factionDebt.findMany({
+          where: {
+            campaignId,
+            status: 'OUTSTANDING',
+            // Either end must be visible for the row to be worth loading;
+            // the shaping function then drops it unless BOTH are.
+            OR: [
+              { debtorFactionId: { in: factionIds } },
+              { creditorFactionId: { in: factionIds } },
+            ],
+          },
+          select: { creditorFactionId: true, debtorFactionId: true, amount: true },
+        })
+      : [],
+    locationIds.length > 0
+      ? prisma.supplyRoute.findMany({
+          where: {
+            campaignId,
+            OR: [{ fromLocationId: { in: locationIds } }, { toLocationId: { in: locationIds } }],
+          },
+          select: { fromLocationId: true, toLocationId: true, isBlockaded: true },
+        })
+      : [],
+    // Bounded and recent: migrationTick writes one row per fleeing group
+    // per turn, so an old campaign accumulates them indefinitely and the
+    // card only ever shows where people are going NOW.
+    locationIds.length > 0
+      ? prisma.populationFlightEvent.findMany({
+          where: { campaignId, fromLocationId: { in: locationIds } },
+          orderBy: { turnNumber: 'desc' },
+          take: RECENT_FLIGHT_ROWS,
+          select: { fromLocationId: true, toLocationId: true, toLocationName: true },
+        })
+      : [],
+  ])
+
+  const npcByName = new Map(npcs.map((n) => [n.name.toLowerCase(), n]))
+  const factionByName = new Map(factions.map((f) => [f.name.toLowerCase(), f]))
+  const locationByName = new Map(locations.map((l) => [l.name.toLowerCase(), l]))
+
+  return entries.map((entry) => {
+    const key = entry.name.toLowerCase()
+
+    if (entry.entryType === 'NPC') {
+      const npc = npcByName.get(key)
+      if (!npc) return entry
+      // npcTies() is tieGraph's own per-node projection — the NPC
+      // counterpart of the factionTies() the factions route already uses,
+      // written for #373 and until now called only by the prompt builder.
+      const ties = Object.entries(npcTies(npc)).map(([otherId, tie]) => ({
+        otherId,
+        type: tie.type as TieKind,
+      }))
+      return { ...entry, connections: npcConnectionsFor(ties, npcNameById) }
+    }
+
+    if (entry.entryType === 'FACTION') {
+      const faction = factionByName.get(key)
+      if (!faction) return entry
+      return {
+        ...entry,
+        connections: factionConnectionsFor(role, faction.id, debts, factionNameById),
+      }
+    }
+
+    if (entry.entryType === 'LOCATION') {
+      const location = locationByName.get(key)
+      if (!location) return entry
+      const mine = routes.filter(
+        (r) => r.fromLocationId === location.id || r.toLocationId === location.id
+      )
+      const fleeing = flights.filter((f) => f.fromLocationId === location.id)
+      return {
+        ...entry,
+        connections: locationConnectionsFor(location.id, mine, fleeing, locationNameById),
+      }
+    }
+
+    return entry
+  })
+}
+
 // GET /api/campaigns/[id]/wiki - Get wiki entries
 export async function GET(
   request: NextRequest,
@@ -344,7 +507,12 @@ export async function GET(
     // only ever decorates rows that already survived fog of war.
     const withStats = await attachEntityStats(campaignId, isAdmin, combined)
 
-    return NextResponse.json({ entries: withStats })
+    // #521: the relational half of the same idea. Runs after stats for the
+    // same reason stats runs after filtering — it only ever decorates rows
+    // that already survived fog of war.
+    const withConnections = await attachEntityConnections(campaignId, isAdmin, withStats)
+
+    return NextResponse.json({ entries: withConnections })
   } catch (error) {
     console.error('Error fetching wiki entries:', error)
     return NextResponse.json({ error: 'Failed to fetch wiki entries' }, { status: 500 })

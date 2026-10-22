@@ -1,6 +1,6 @@
 // src/lib/api/worldEventFog.ts
 //
-// Fog of war for WorldEvent rows (#520/#522/#523).
+// Fog of war for WorldEvent rows (#520).
 //
 // WorldEvent.targetId is a plain string with no foreign key — deliberately,
 // since target rows can be deleted independently — and targetType spans
@@ -9,13 +9,30 @@
 // against factions or npcs directly. It has to be resolved against the
 // visible ids of each gated model and then applied per row.
 //
-// Built once per request and reused, because all three player-facing
-// readers of this table need the identical filter and the alternative is
-// three hand-rolled versions of it — the duplicated-rule pattern
-// visibility.ts exists to end, at the one layer where drift is a data
-// leak rather than a wrong number.
+// WHICH TYPES ARE GATED IS NOT DECIDED HERE. It comes from
+// world-digest.ts's DISCOVERY_SOURCE_BY_ENTITY_TYPE, which is the table
+// the world digest and the absence journal (#395/#432/#396) already share.
+// That table's own comment explains why: the gate and the id set used to
+// be two independent lists, #432 changed one and not the other, and every
+// location change then failed a check against a set that could never
+// contain it — "that inverted the leak into a total blackout".
+//
+// This module shipped with a hand-written third copy of that mapping, with
+// a different answer: it gated CLOCK, and it denied every type the table
+// does not list (QUEST, WAR, CHARACTER, DEBT). Both were wrong in the same
+// direction — silently dropping events the other two surfaces show — and
+// both were exactly the defect the shared table exists to prevent. The
+// mapping is now read, not restated.
+//
+// One known divergence remains, and it is the shared table's rather than
+// this file's: CLOCK is absent from it, so a hidden clock's tick reaches
+// every player-facing reader of WorldEvent. Clocks do model concealment
+// (Clock.isHidden, inverted polarity — see visibility.ts). That is a
+// pre-existing leak in three surfaces, not something to fork a fourth
+// answer over, so it is raised separately rather than fixed here.
 
 import { prisma } from '@/lib/prisma'
+import { DISCOVERY_SOURCE_BY_ENTITY_TYPE } from '@/lib/notifications/world-digest'
 import { visibleTo, isCampaignAdmin, type CampaignRole } from './visibility'
 
 /** The shape this filter needs off a WorldEvent row. */
@@ -24,39 +41,25 @@ export interface FogGatedEvent {
   targetId: string
 }
 
-/**
- * Which fog-gated model each WorldEventTargetType resolves to.
- *
- * The three LOCATION_* types are all events ABOUT a Location — weather
- * over it, its condition, its population — so they gate on that
- * location's own discovery.
- *
- * An absent targetType is DENIED, not allowed. Four of the enum's values
- * (QUEST, WAR, CHARACTER, DEBT) have no fog column anywhere in this
- * codebase and would be safe to pass through today; they are left out
- * anyway so that adding a phrasing for one in worldEventPhrasing.ts
- * forces a deliberate decision here rather than quietly inheriting
- * "visible to everyone". Nothing is currently lost by that: the phrasing
- * table has no sentence for any of them, so they never reach a player
- * surface in the first place.
- */
-const TARGET_FOG_MODEL = {
-  FACTION: 'faction',
-  NPC: 'npc',
-  LOCATION: 'location',
-  LOCATION_WEATHER: 'location',
-  LOCATION_CONDITION: 'location',
-  LOCATION_POPULATION: 'location',
-  CLOCK: 'clock',
-} as const
+type DiscoverySource = (typeof DISCOVERY_SOURCE_BY_ENTITY_TYPE)[keyof typeof DISCOVERY_SOURCE_BY_ENTITY_TYPE]
 
-type GatedTargetType = keyof typeof TARGET_FOG_MODEL
+/** Which fog-gated model each discovery source resolves through. The
+ *  Prisma accessor and the visibleTo() model name differ only for NPC. */
+const FOG_MODEL: Record<DiscoverySource, 'npc' | 'faction' | 'location'> = {
+  nPC: 'npc',
+  faction: 'faction',
+  location: 'location',
+}
 
 /**
  * A predicate deciding whether one event's target is visible to this role.
  *
- * Returns an always-true predicate for an admin — they see through the
- * fog everywhere else, and the four id queries below would be wasted work.
+ * Returns an always-true predicate for an admin — they see through the fog
+ * everywhere else, and the id queries below would be wasted work.
+ *
+ * A targetType the shared table does not list passes through, because
+ * those types do not model discovery: a quest, a war or a debt is not
+ * something the party "learns exists".
  */
 export async function buildWorldEventFog(
   campaignId: string,
@@ -66,7 +69,7 @@ export async function buildWorldEventFog(
 
   // Id-only selects: this is a membership test, and pulling whole rows to
   // answer it would be the expensive way to ask.
-  const [factions, npcs, locations, clocks] = await Promise.all([
+  const [factions, npcs, locations] = await Promise.all([
     prisma.faction.findMany({
       where: { campaignId, ...visibleTo('faction', role) },
       select: { id: true },
@@ -79,22 +82,19 @@ export async function buildWorldEventFog(
       where: { campaignId, ...visibleTo('location', role) },
       select: { id: true },
     }),
-    prisma.clock.findMany({
-      where: { campaignId, ...visibleTo('clock', role) },
-      select: { id: true },
-    }),
   ])
 
-  const visibleIds: Record<(typeof TARGET_FOG_MODEL)[GatedTargetType], Set<string>> = {
+  const visibleIds: Record<'npc' | 'faction' | 'location', Set<string>> = {
     faction: new Set(factions.map((r) => r.id)),
     npc: new Set(npcs.map((r) => r.id)),
     location: new Set(locations.map((r) => r.id)),
-    clock: new Set(clocks.map((r) => r.id)),
   }
 
   return (event: FogGatedEvent) => {
-    const model = TARGET_FOG_MODEL[event.targetType as GatedTargetType]
-    if (!model) return false
-    return visibleIds[model].has(event.targetId)
+    const source = (DISCOVERY_SOURCE_BY_ENTITY_TYPE as Record<string, DiscoverySource | undefined>)[
+      event.targetType
+    ]
+    if (!source) return true
+    return visibleIds[FOG_MODEL[source]].has(event.targetId)
   }
 }

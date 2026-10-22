@@ -9,6 +9,7 @@ import { globSync } from 'glob'
 import {
   phraseWorldEvent,
   phrasedTypes,
+  phrasedFields,
   changeDirection,
   SILENT_TYPES,
 } from '../worldEventPhrasing'
@@ -27,8 +28,15 @@ function tickFieldNames(): Set<string> {
   return fields
 }
 
-/** The field half of every type this module has an opinion about. */
+/** Every field either layer has an opinion about, plus the silent ones. */
 function phrasedFieldNames(): Set<string> {
+  const fromTypes = [...phrasedTypes(), ...SILENT_TYPES].map((k) => k.slice(k.indexOf('.') + 1))
+  return new Set([...fromTypes, ...phrasedFields()])
+}
+
+/** Just the type layer's fields — the only ones a staleness check can
+ *  speak to. See the stale test for why. */
+function typeLayerFieldNames(): Set<string> {
   const keys = [...phrasedTypes(), ...SILENT_TYPES]
   return new Set(keys.map((k) => k.slice(k.indexOf('.') + 1)))
 }
@@ -150,8 +158,31 @@ describe('vocabulary drift', () => {
     ).toEqual([])
   })
 
-  it('has no phrasing for a field nothing writes any more', () => {
-    const stale = [...phrasedFieldNames()].filter((f) => !tickFieldNames().has(f)).sort()
+  it('has no type-layer phrasing for a field nothing writes any more', () => {
+    const stale = [...typeLayerFieldNames()].filter((f) => !tickFieldNames().has(f)).sort()
     expect(stale, `phrasings for fields no tick handler writes — dead vocabulary`).toEqual([])
+  })
+
+  it('does not claim the field layer is free of dead entries', () => {
+    // FIELD_LINES is deliberately NOT staleness-checked, and this test
+    // records why rather than leaving the asymmetry unexplained.
+    //
+    // Field names do not all arrive from literals. The integrity engine
+    // and consequence extraction write `field: repair.field`,
+    // `change.field`, `claim.kind` and `f.key` — computed at runtime — so
+    // a grep over tick sources cannot enumerate the real vocabulary. Four
+    // of #396's lines (`founded`, `leader`, `leadership`, `status`) have
+    // no literal writer anywhere in src/lib and may still be live through
+    // one of those paths. Asserting they are dead would delete reviewed
+    // player copy on the strength of a grep that is known to be partial.
+    //
+    // The forward direction above is the one that holds either way: a new
+    // field with no sentence is caught, whichever layer ends up covering
+    // it.
+    const noLiteralWriter = ['founded', 'leader', 'leadership', 'status']
+    for (const field of noLiteralWriter) {
+      expect(phrasedFields(), `${field} should still be phrased`).toContain(field)
+      expect(tickFieldNames().has(field), `${field} gained a literal writer — the stale check can now cover it`).toBe(false)
+    }
   })
 })

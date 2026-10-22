@@ -21,10 +21,31 @@
 //     deliberately keeps off-screen. So previousValue/newValue are read
 //     for their DIRECTION and then discarded.
 //
-// Three readers share this: the per-character knowledge surface (#520),
-// the world chronicle (#522) and the since-you-last-looked diff (#523). A
-// phrasing that must be identical in three places is the same argument
-// consequenceLabels.ts already makes for its own four categories.
+// FOUR readers share this, and the fourth is why the table is shaped the
+// way it is. #396's absence journal already had a phrasing table for this
+// column — FIELD_LINES, keyed on the bare `field`, with the same reasoning
+// written above it ("WorldEvent.reason is GM-GRADE... nothing below ever
+// touches reason") and, before it, world-digest.ts's per-field templates.
+// This module shipped as a second one. Two tables phrasing the same column
+// for players is precisely what consequenceLabels.ts's own comment
+// forbids: "a label that must be identical in two renderers is not a
+// component's business."
+//
+// So FIELD_LINES moved here, and there are now two layers rather than two
+// tables:
+//
+//   PHRASINGS   keyed on `targetType.field`, and can therefore read a
+//               DIRECTION off the value columns and distinguish the same
+//               field on different entity types.
+//   FIELD_LINES keyed on the bare `field`, for the cases where the field
+//               means the same thing wherever it appears, and where the
+//               caller has no values to read a direction from. This is
+//               #396's reviewed copy, kept verbatim.
+//
+// The type layer wins when it matches, because it is strictly better
+// informed. The journal keeps its own CATEGORY_FALLBACK on top of both —
+// that one is keyed on an AbsenceCategory, which is a journal concept and
+// not a property of the event.
 //
 // Dependency-free (no Prisma, no React) so a 'use client' component and a
 // route handler can share the vocabulary — the same split as
@@ -118,26 +139,39 @@ const PHRASINGS: Record<string, Phrasing> = {
     kind: 'power',
     up: (n) => `${n} has grown wealthier.`,
     down: (n) => `${n}'s coffers are thinning.`,
+    // Every directional entry carries a flat form too. A caller that did
+    // not select previousValue/newValue (the absence journal does not)
+    // still deserves a sentence, and falling through to a category
+    // fallback would make the recap vaguer than it was before this table
+    // existed. The flat wording is #396's.
+    flat: (n) => `${n}'s fortunes shifted.`,
   },
   'faction.stability': {
     kind: 'power',
     up: (n) => `${n} has steadied itself.`,
     down: (n) => `${n} is fraying at the edges.`,
+    // #396's line was `${n} grew less steady.` unconditionally, which was
+    // wrong half the time — the same row is written when stability RISES.
+    // Directional above; neutral here.
+    flat: (n) => `${n}'s footing changed.`,
   },
   'faction.influence': {
     kind: 'power',
     up: (n) => `${n}'s reach is widening.`,
     down: (n) => `${n}'s reach is narrowing.`,
+    flat: (n) => `${n}'s reach has shifted.`,
   },
   'faction.threat': {
     kind: 'power',
     up: (n) => `${n} has become more dangerous.`,
     down: (n) => `${n} has become less of a danger.`,
+    flat: (n) => `${n} is regarded differently now.`,
   },
   'faction.debt': {
     kind: 'power',
     up: (n) => `${n} has fallen deeper into obligation.`,
     down: (n) => `${n} has settled some of what it owed.`,
+    flat: (n) => `What ${n} owes has changed.`,
   },
   'faction.collapsed': {
     kind: 'power',
@@ -201,6 +235,7 @@ const PHRASINGS: Record<string, Phrasing> = {
     kind: 'people',
     up: (n) => `${n}'s mood has softened.`,
     down: (n) => `${n}'s mood has hardened.`,
+    flat: (n) => `${n} regards things differently now.`,
   },
 
   // --- places ---
@@ -209,11 +244,13 @@ const PHRASINGS: Record<string, Phrasing> = {
     kind: 'place',
     up: (n) => `${n} is recovering.`,
     down: (n) => `${n} is in worse shape than it was.`,
+    flat: (n) => `${n} is not in the state you left it.`,
   },
   'location_population.population': {
     kind: 'place',
     up: (n) => `${n} is more crowded than it was.`,
     down: (n) => `${n} is emptier than it was.`,
+    flat: (n) => `People moved through ${n} — it is busier or emptier than it was.`,
   },
   'location_population.populationFlight': {
     kind: 'place',
@@ -226,6 +263,7 @@ const PHRASINGS: Record<string, Phrasing> = {
     kind: 'thread',
     up: (n) => `${n} has drawn closer.`,
     down: (n) => `${n} has been pushed back.`,
+    flat: (n) => `The thread on ${n} moved.`,
   },
 }
 
@@ -248,38 +286,108 @@ export const SILENT_TYPES = new Set([
 ])
 
 /**
+ * The second layer: #396's FIELD_LINES, keyed on the bare `field` and
+ * moved here verbatim rather than rewritten.
+ *
+ * These cover fields that mean the same thing on every entity type they
+ * appear on, including several the type layer above has no key for at all
+ * (`founded`, `leader`, `status` — written against QUEST and WAR targets,
+ * which the tick handlers reach through paths the type table does not
+ * enumerate). Arrays because the journal selects deterministically among
+ * variants; all of them happen to hold one line today.
+ *
+ * `kind` is assigned per field so a caller that groups by kind gets
+ * something sensible out of this layer too.
+ */
+const FIELD_LINES: Record<string, { kind: WorldEventKind; texts: Array<(name: string) => string> }> = {
+  warDeclared: { kind: 'war', texts: [(n) => `${n} went to war while you were away.`] },
+  warResolved: { kind: 'war', texts: [(n) => `${n}'s war came to an end.`] },
+  warEnded: { kind: 'war', texts: [(n) => `${n}'s war came to an end.`] },
+  collapsed: { kind: 'power', texts: [(n) => `${n} fell apart entirely.`] },
+  founded: { kind: 'power', texts: [(n) => `${n} rose to prominence.`] },
+  leader: { kind: 'people', texts: [(n) => `${n} answers to new leadership now.`] },
+  leadership: { kind: 'people', texts: [(n) => `${n} answers to new leadership now.`] },
+  factionRole: { kind: 'people', texts: [(n) => `${n} answers to new leadership now.`] },
+  resources: { kind: 'power', texts: [(n) => `${n}'s fortunes shifted.`] },
+  stability: { kind: 'power', texts: [(n) => `${n}'s footing changed.`] },
+  weather: { kind: 'place', texts: [(n) => `The weather over ${n} turned.`] },
+  conditionScore: { kind: 'place', texts: [(n) => `${n} is not in the state you left it.`] },
+  population: {
+    kind: 'place',
+    texts: [(n) => `People moved through ${n} — it is busier or emptier than it was.`],
+  },
+  currentTicks: { kind: 'thread', texts: [(n) => `The thread on ${n} moved closer to striking.`] },
+  status: { kind: 'power', texts: [(n) => `${n}'s standing changed.`] },
+  goal: { kind: 'people', texts: [(n) => `${n} is pursuing something new.`] },
+}
+
+/** The field half of a `targetType.field` type key. */
+function fieldOf(type: string): string {
+  const dot = type.indexOf('.')
+  return dot === -1 ? type : type.slice(dot + 1)
+}
+
+/**
+ * Every sentence this module would accept for one event, most specific
+ * first, or null when it has none.
+ *
+ * Exposed alongside phraseWorldEvent for the one caller that wants to pick
+ * among variants itself: the absence journal selects deterministically on
+ * the event's own id, so the same absence always reads the same way.
+ * Keeping that selection at the call site means this module does not need
+ * a hashing dependency.
+ */
+export function phraseWorldEventVariants(
+  event: PhraseableEvent
+): { texts: string[]; kind: WorldEventKind } | null {
+  if (SILENT_TYPES.has(event.type)) return null
+
+  const name = event.targetName?.trim()
+  // Every sentence here is built around a name, and `"'s coffers are
+  // thinning"` is not worth showing anyone.
+  if (!name) return null
+
+  const phrasing = PHRASINGS[event.type]
+  if (phrasing) {
+    const direction = changeDirection(event.previousValue, event.newValue)
+    const render =
+      (direction === 'up' && phrasing.up) ||
+      (direction === 'down' && phrasing.down) ||
+      phrasing.flat ||
+      null
+    if (render) return { texts: [render(name)], kind: phrasing.kind }
+  }
+
+  // Fall through to the field layer rather than returning null: a type the
+  // first table has no key for may still be a field the second one knows.
+  const byField = FIELD_LINES[fieldOf(event.type)]
+  if (byField) return { texts: byField.texts.map((t) => t(name)), kind: byField.kind }
+
+  return null
+}
+
+/**
  * Turn one event into a sentence, or null when it has no player-facing
  * phrasing.
  *
- * Null is a normal outcome, not an error: callers drop the row. Fails
- * closed on an unmapped type for the reason PHRASINGS' own comment gives,
- * and on a blank targetName, since every sentence here is built around a
- * name and `"'s coffers are thinning"` is not worth showing anyone.
+ * Null is a normal outcome, not an error: callers drop the row, or supply
+ * their own fallback. Fails closed on a type neither layer knows, for the
+ * reason PHRASINGS' own comment gives.
  */
 export function phraseWorldEvent(event: PhraseableEvent): PhrasedWorldEvent | null {
-  if (SILENT_TYPES.has(event.type)) return null
-  const phrasing = PHRASINGS[event.type]
-  if (!phrasing) return null
-
-  const name = event.targetName?.trim()
-  if (!name) return null
-
-  const direction = changeDirection(event.previousValue, event.newValue)
-  const render =
-    (direction === 'up' && phrasing.up) ||
-    (direction === 'down' && phrasing.down) ||
-    phrasing.flat ||
-    null
-
-  // A directional field that moved the one way it has no sentence for, or
-  // did not move at all, is nothing to report.
-  if (!render) return null
-
-  return { text: render(name), kind: phrasing.kind }
+  const variants = phraseWorldEventVariants(event)
+  if (!variants) return null
+  return { text: variants.texts[0], kind: variants.kind }
 }
 
-/** Every type with a sentence. Exported for the guard test that keeps this
- *  table and the tick handlers' own vocabulary from drifting apart. */
+/** Every type with a sentence in the first layer. Exported for the guard
+ *  test that keeps this table and the tick handlers' own vocabulary from
+ *  drifting apart. */
 export function phrasedTypes(): string[] {
   return Object.keys(PHRASINGS)
+}
+
+/** Every bare field the second layer phrases. Same purpose. */
+export function phrasedFields(): string[] {
+  return Object.keys(FIELD_LINES)
 }

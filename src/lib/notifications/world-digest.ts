@@ -68,8 +68,14 @@ export const MAX_DIGEST_LINES = 3
  *
  * Adding a type here now brings its id source with it, because there is
  * only one place to add it.
+ *
+ * #520: exported, because the per-character knowledge surface
+ * (lib/api/worldEventFog.ts) is a third reader of WorldEvent that needs
+ * the identical answer. It shipped with its own hand-written copy of this
+ * mapping and a different one — the exact two-independent-lists shape the
+ * paragraph above is about.
  */
-const DISCOVERY_SOURCE_BY_ENTITY_TYPE = {
+export const DISCOVERY_SOURCE_BY_ENTITY_TYPE = {
   NPC: 'nPC',
   FACTION: 'faction',
   LOCATION: 'location',

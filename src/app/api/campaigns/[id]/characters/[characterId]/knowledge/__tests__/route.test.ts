@@ -137,6 +137,29 @@ describe('GET', () => {
     expect(body.secondhand).toEqual([])
   })
 
+  it('does not gate an event type that models no discovery', async () => {
+    // WAR, QUEST, CHARACTER and DEBT are absent from
+    // DISCOVERY_SOURCE_BY_ENTITY_TYPE because a war is not something the
+    // party "learns exists". This route first shipped denying every
+    // unlisted type, which silently dropped events the world digest and
+    // the absence journal both show.
+    db.faction.findMany.mockResolvedValue([])
+    db.eventWitness.findMany.mockResolvedValue([
+      witnessRow({
+        worldEvent: {
+          type: 'faction.warDeclared',
+          targetType: 'WAR',
+          targetId: 'war1',
+          targetName: 'The Salt Road War',
+          previousValue: null,
+          newValue: null,
+        },
+      }),
+    ])
+    const body = await (await GET(request(), params)).json()
+    expect(body.firsthand).toHaveLength(1)
+  })
+
   it('splits what was witnessed from what was merely heard', async () => {
     db.eventWitness.findMany.mockResolvedValue([
       witnessRow({ grade: 'WITNESSED', turnNumber: 9 }),

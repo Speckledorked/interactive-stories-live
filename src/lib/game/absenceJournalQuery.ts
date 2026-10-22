@@ -76,7 +76,13 @@ export const JOURNAL_SCAN_LIMIT = 400
 export async function loadAbsenceJournal(
   campaignId: string,
   since: Date,
-  role: CampaignRole
+  role: CampaignRole,
+  // #523: the mid-session pulse wants the same selection over a much
+  // shorter window and far fewer lines. Parameterised rather than copied,
+  // so coverage-first selection, the fog pass and the phrasing stay in one
+  // place — buildAbsenceJournal has always taken this; only this wrapper
+  // hardcoded it.
+  maxEntries: number = MAX_JOURNAL_ENTRIES
 ): Promise<AbsenceJournal> {
   const scanWhere = { campaignId, createdAt: { gt: since } }
 
@@ -151,5 +157,5 @@ export async function loadAbsenceJournal(
       }
     : undefined
 
-  return buildAbsenceJournal(visible, MAX_JOURNAL_ENTRIES, windowTotals)
+  return buildAbsenceJournal(visible, maxEntries, windowTotals)
 }

@@ -30,13 +30,22 @@ import {
 } from '@/lib/game/characterKnowledge'
 
 /**
- * How many rows to pull before filtering.
+ * How many rows to pull PER GRADE before filtering.
  *
  * Fog and phrasing both drop rows AFTER the query, so taking exactly the
  * display cap would under-fill the lists whenever anything got dropped.
  * Bounded well above the cap instead — enough headroom that a normal
  * character's lists fill, while an ancient campaign still cannot ship an
  * unbounded read.
+ *
+ * Per grade, and that is the correction. This was one combined scan
+ * ordered by recency across both grades, which defeated the whole reason
+ * characterKnowledge.ts caps the two sources independently: a character
+ * with hundreds of recent WITNESSED rows filled the entire scan with
+ * them, and the TOLD list came back empty however much hearsay they had.
+ * Two queries, each with its own window, is the only shape that honours
+ * that cap — the module's comment about one grade not crowding out the
+ * other was being undone by its caller.
  */
 const WITNESS_SCAN_LIMIT = MAX_KNOWN_EVENTS_PER_SOURCE * 10
 
@@ -81,12 +90,14 @@ export async function GET(
       )
     }
 
-    // Independent of the row fetch, so they overlap rather than queue.
-    const [isVisible, witnessRows] = await Promise.all([
-      buildWorldEventFog(campaignId, membership.role),
+    const witnessQuery = (grade: 'WITNESSED' | 'TOLD') =>
       prisma.eventWitness.findMany({
-        where: { campaignId, characterId },
-        orderBy: { turnNumber: 'desc' },
+        where: { campaignId, characterId, grade },
+        // `id` breaks the tie. Turn numbers can freeze (#374) and a TOLD
+        // row's turnNumber is the turn word ARRIVED, so many rows share
+        // one — without a tiebreak which ones survive the scan is
+        // whatever Postgres happens to return.
+        orderBy: [{ turnNumber: 'desc' }, { id: 'desc' }],
         take: WITNESS_SCAN_LIMIT,
         select: {
           grade: true,
@@ -108,8 +119,15 @@ export async function GET(
             },
           },
         },
-      }),
+      })
+
+    // All independent, so they overlap rather than queue.
+    const [isVisible, witnessed, told] = await Promise.all([
+      buildWorldEventFog(campaignId, membership.role),
+      witnessQuery('WITNESSED'),
+      witnessQuery('TOLD'),
     ])
+    const witnessRows = [...witnessed, ...told]
 
     const rows: KnowledgeRow[] = witnessRows
       .filter((row) =>

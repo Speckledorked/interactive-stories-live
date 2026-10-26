@@ -121,8 +121,63 @@ describe('phraseWorldEvent', () => {
       previousValue: null,
       newValue: null,
     })
-    expect(phrased?.text).toContain('declared war')
+    // Wording comes from the field layer now (see layer precedence
+    // below) — the assertion is that it speaks at all without values.
+    expect(phrased?.text).toContain('went to war')
     expect(phrased?.kind).toBe('war')
+  })
+})
+
+describe('layer precedence', () => {
+  // The regression this ordering exists to prevent: the first version put
+  // `phrasing.flat` ahead of the field layer, so any caller selecting no
+  // values — the absence journal selects none — got the type layer's flat
+  // form instead of #396's reviewed line. Four lines changed silently.
+
+  it("uses the reviewed field line when there is no direction to read", () => {
+    expect(
+      phraseWorldEvent({ type: 'clock.currentTicks', targetName: 'The Siege' })?.text
+    ).toBe('The thread on The Siege moved closer to striking.')
+    expect(
+      phraseWorldEvent({ type: 'faction.collapsed', targetName: 'The Iron Company' })?.text
+    ).toBe('The Iron Company fell apart entirely.')
+  })
+
+  it('prefers the direction-aware line when values are present', () => {
+    // The one thing the type layer knows that the field layer cannot.
+    expect(
+      phraseWorldEvent({
+        type: 'faction.resources',
+        targetName: 'The Iron Company',
+        previousValue: '40',
+        newValue: '44',
+      })?.text
+    ).toBe('The Iron Company has grown wealthier.')
+    // Same field, no values: the field layer's neutral line.
+    expect(
+      phraseWorldEvent({ type: 'faction.resources', targetName: 'The Iron Company' })?.text
+    ).toBe("The Iron Company's fortunes shifted.")
+  })
+
+  it('falls back to a flat type line only when the field layer has none', () => {
+    // jointScheme has no FIELD_LINES entry and no direction.
+    expect(
+      phraseWorldEvent({ type: 'npc.jointScheme', targetName: 'Elder Rowan' })?.text
+    ).toContain('accomplice')
+  })
+
+  it('assumes nothing about the reader having been away', () => {
+    // These lines are shared with the chronicle and the knowledge panel,
+    // where "while you were away" would simply be false. #396's
+    // warDeclared line said exactly that.
+    for (const type of phrasedTypes()) {
+      const text = phraseWorldEvent({ type, targetName: 'X' })?.text ?? ''
+      expect(text, `${type} assumes an absence`).not.toMatch(/while you were away|you left it/)
+    }
+    for (const field of phrasedFields()) {
+      const text = phraseWorldEvent({ type: `faction.${field}`, targetName: 'X' })?.text ?? ''
+      expect(text, `${field} assumes an absence`).not.toMatch(/while you were away|you left it/)
+    }
   })
 })
 

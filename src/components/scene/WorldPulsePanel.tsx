@@ -17,7 +17,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CollapsibleSidebarCard } from '@/components/scene/CollapsibleSidebarCard'
 import { authenticatedFetch } from '@/lib/clientAuth'
 
@@ -38,7 +38,14 @@ export function WorldPulsePanel({ campaignId, sceneId }: WorldPulsePanelProps) {
   const [entries, setEntries] = useState<PulseEntry[]>([])
   const [totalEvents, setTotalEvents] = useState(0)
 
+  // Which scene the newest request is for. Same whichever-settles-last
+  // race EntityBrowser documents: when one scene resolves and the next
+  // begins, a slow response for the old window must not land on top of
+  // the new one and report movement from before the player sat down.
+  const latestRequest = useRef<string | null>(null)
+
   const load = useCallback(async () => {
+    latestRequest.current = sceneId ?? null
     // No scene, no window — the route says the same thing, and asking
     // anyway would be a request whose answer is known.
     if (!sceneId) {
@@ -48,8 +55,10 @@ export function WorldPulsePanel({ campaignId, sceneId }: WorldPulsePanelProps) {
     }
     try {
       const response = await authenticatedFetch(`/api/campaigns/${campaignId}/world-pulse`)
+      if (latestRequest.current !== sceneId) return
       if (!response.ok) return
       const data = await response.json()
+      if (latestRequest.current !== sceneId) return
       setEntries(data.entries ?? [])
       setTotalEvents(data.totalEvents ?? 0)
     } catch {

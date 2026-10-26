@@ -17,14 +17,19 @@ import {
 } from '@/lib/game/entityConnections'
 
 /**
- * How many recent flight rows to consider across the whole campaign.
+ * How many recent flight destinations one location's card shows.
  *
- * migrationTick writes one row per fleeing group per turn, so this table
- * only grows. The card wants "where are people going now", and a bound an
- * order of magnitude above the number of locations a campaign has is
- * plenty for that while keeping the read flat as a campaign ages.
+ * This was a campaign-wide `take: 50` applied BEFORE the per-location
+ * filter, which was the wrong shape: migrationTick writes one row per
+ * fleeing group per turn, so in a campaign with a dozen locations the
+ * fifty newest rows cluster on whichever places are currently emptying
+ * and every other location silently lost its "Leaving for" line. Which
+ * ones lost it was also arbitrary, since the sort had no tiebreak.
+ *
+ * Bounded per location instead, via a grouped query (see below), so the
+ * bound means what the card means.
  */
-const RECENT_FLIGHT_ROWS = 50
+const FLIGHT_DESTINATIONS_PER_LOCATION = 4
 
 // Fog of war: WikiEntry rows are matched to their source entity by name, not
 // a real FK, so there's no isDiscovered column to filter on directly here.
@@ -388,20 +393,25 @@ async function attachEntityConnections<T extends { entryType: string; name: stri
           select: { fromLocationId: true, toLocationId: true, isBlockaded: true },
         })
       : [],
-    // Bounded and recent: migrationTick writes one row per fleeing group
-    // per turn, so an old campaign accumulates them indefinitely and the
-    // card only ever shows where people are going NOW.
+    // Grouped by (origin, destination) rather than taken as raw rows.
+    //
+    // The card asks "where are people going", which is a set of
+    // destinations, not a list of events — and grouping is what lets the
+    // bound be per location. `_max.turnNumber` is the recency key the
+    // sort needs; the group itself collapses the repeat rows that
+    // migrationTick writes turn after turn for the same route, which the
+    // shaping function was de-duplicating in memory anyway.
     locationIds.length > 0
-      ? prisma.populationFlightEvent.findMany({
+      ? prisma.populationFlightEvent.groupBy({
+          by: ['fromLocationId', 'toLocationId'],
           where: { campaignId, fromLocationId: { in: locationIds } },
-          orderBy: { turnNumber: 'desc' },
-          take: RECENT_FLIGHT_ROWS,
-          // toLocationName is NOT selected. The row denormalizes it at
-          // write time, when the place may have been visible, so the
-          // destination is resolved through the fog index instead — see
-          // entityConnections.ts. Selecting a name nothing may render is
-          // how it ends up rendered.
-          select: { fromLocationId: true, toLocationId: true },
+          _max: { turnNumber: true },
+          // toLocationName is deliberately not grouped on. The row
+          // denormalizes it at write time, when the place may have been
+          // visible, so the destination is resolved through the fog index
+          // instead — see entityConnections.ts. Selecting a name nothing
+          // may render is how it ends up rendered.
+          orderBy: { _max: { turnNumber: 'desc' } },
         })
       : [],
   ])
@@ -441,7 +451,11 @@ async function attachEntityConnections<T extends { entryType: string; name: stri
       const mine = routes.filter(
         (r) => r.fromLocationId === location.id || r.toLocationId === location.id
       )
-      const fleeing = flights.filter((f) => f.fromLocationId === location.id)
+      // Per location, and only then bounded — the fix for a bound that
+      // used to be spent campaign-wide before this filter ran.
+      const fleeing = flights
+        .filter((f) => f.fromLocationId === location.id)
+        .slice(0, FLIGHT_DESTINATIONS_PER_LOCATION)
       return {
         ...entry,
         connections: locationConnectionsFor(location.id, mine, fleeing, locationNameById),

@@ -15,7 +15,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Ear, Eye } from 'lucide-react'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import type { KnownEvent } from '@/lib/game/characterKnowledge'
@@ -30,26 +30,42 @@ export default function CharacterKnowledgePanel({ campaignId, characterId }: Pro
   const [secondhand, setSecondhand] = useState<KnownEvent[]>([])
   const [loaded, setLoaded] = useState(false)
 
+  // Which character the newest request is for. Without this, moving
+  // between two character sheets can land the slower response last and
+  // render one character's knowledge under the other's name — the same
+  // whichever-settles-last race EntityBrowser documents for its own
+  // fetches. It matters more here: this data is owner-scoped, and the
+  // whole point of it is that it belongs to one character.
+  const latestRequest = useRef<string | null>(null)
+
   const load = useCallback(async () => {
+    latestRequest.current = characterId
     try {
       const response = await authenticatedFetch(
         `/api/campaigns/${campaignId}/characters/${characterId}/knowledge`
       )
+      if (latestRequest.current !== characterId) return
       // A 403 here is the ordinary case for someone else's character, not
       // an error worth showing: the panel simply has nothing to say.
       if (!response.ok) return
       const data = await response.json()
+      if (latestRequest.current !== characterId) return
       setFirsthand(data.firsthand ?? [])
       setSecondhand(data.secondhand ?? [])
     } catch {
       // Silent: this is a supplementary panel, and a failed fetch should
       // not put an error banner on an otherwise working character sheet.
     } finally {
-      setLoaded(true)
+      if (latestRequest.current === characterId) setLoaded(true)
     }
   }, [campaignId, characterId])
 
   useEffect(() => {
+    // Cleared on the way in so a switch shows nothing rather than the
+    // previous character's entries while the new request is in flight.
+    setLoaded(false)
+    setFirsthand([])
+    setSecondhand([])
     load()
   }, [load])
 

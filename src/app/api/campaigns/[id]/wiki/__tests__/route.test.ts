@@ -24,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
     // (which discover none) never reach them.
     factionDebt: { findMany: vi.fn() },
     supplyRoute: { findMany: vi.fn() },
-    populationFlightEvent: { findMany: vi.fn() },
+    populationFlightEvent: { groupBy: vi.fn() },
   },
 }))
 
@@ -58,7 +58,7 @@ beforeEach(() => {
   db.character.findFirst.mockResolvedValue(null)
   db.factionDebt.findMany.mockResolvedValue([])
   db.supplyRoute.findMany.mockResolvedValue([])
-  db.populationFlightEvent.findMany.mockResolvedValue([])
+  db.populationFlightEvent.groupBy.mockResolvedValue([])
 })
 
 describe('GET', () => {
@@ -433,5 +433,42 @@ describe('GET — connections (#521)', () => {
     expect(entry.connections.allies).toEqual(['Mira'])
     // npc-ghost is not in the discovered set, so the rival tie is dropped.
     expect(entry.connections.rivals).toEqual([])
+  })
+  it('bounds flight destinations per location, not campaign-wide', async () => {
+    // The bug this replaced: a campaign-wide `take: 50` spent before the
+    // per-location filter, so in a campaign whose busiest place was
+    // emptying every turn, every other location silently lost its
+    // "Leaving for" line.
+    db.wikiEntry.findMany.mockResolvedValue([
+      { entryType: 'LOCATION', name: 'Thornkeep' },
+      { entryType: 'LOCATION', name: 'Greyford' },
+    ])
+    db.location.findMany.mockResolvedValue([
+      { id: 'loc-keep', name: 'Thornkeep' },
+      { id: 'loc-ford', name: 'Greyford' },
+      { id: 'loc-mill', name: 'Sutter Mill' },
+    ])
+    db.populationFlightEvent.groupBy.mockResolvedValue([
+      { fromLocationId: 'loc-keep', toLocationId: 'loc-mill', _max: { turnNumber: 9 } },
+      { fromLocationId: 'loc-ford', toLocationId: 'loc-mill', _max: { turnNumber: 2 } },
+    ])
+
+    const body = await (await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })).json()
+    const keep = body.entries.find((e: any) => e.name === 'Thornkeep')
+    const ford = body.entries.find((e: any) => e.name === 'Greyford')
+
+    // The older row still reaches its own location's card.
+    expect(keep.connections.fleeingTo).toEqual(['Sutter Mill'])
+    expect(ford.connections.fleeingTo).toEqual(['Sutter Mill'])
+  })
+
+  it('asks the database to collapse repeat flights rather than de-duplicating in memory', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'LOCATION', name: 'Thornkeep' }])
+    db.location.findMany.mockResolvedValue([{ id: 'loc-keep', name: 'Thornkeep' }])
+    await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })
+
+    const args = db.populationFlightEvent.groupBy.mock.calls[0][0]
+    expect(args.by).toEqual(['fromLocationId', 'toLocationId'])
+    expect(args.orderBy).toEqual({ _max: { turnNumber: 'desc' } })
   })
 })

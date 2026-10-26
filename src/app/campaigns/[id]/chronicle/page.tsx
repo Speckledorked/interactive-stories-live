@@ -112,7 +112,13 @@ export default function ChroniclePage() {
           <SpinnerBlock />
         ) : error ? (
           <p className="text-sm text-myth-danger">{error}</p>
-        ) : entries.length === 0 ? (
+        ) : entries.length === 0 && !cursor ? (
+          // Only truly empty when there is nowhere further back to look.
+          // The route returns an empty page WITH a cursor whenever fog and
+          // phrasing happen to drop everything it scanned, and the first
+          // version rendered this state and hid "Further back" — so a
+          // campaign whose newest events were all unphraseable looked like
+          // it had no history at all, with the rest unreachable.
           <EmptyState
             title="Nothing recorded yet"
             description="The world has not taken a turn of its own since this campaign began. Play on — it will."
@@ -149,6 +155,13 @@ export default function ChroniclePage() {
                 </section>
               ))}
             </div>
+
+            {entries.length === 0 && (
+              <p className="text-sm text-myth-ink-muted">
+                Nothing from the most recent turns has been written down. There may be more further
+                back.
+              </p>
+            )}
 
             {cursor && (
               <div className="mt-10 flex justify-center">

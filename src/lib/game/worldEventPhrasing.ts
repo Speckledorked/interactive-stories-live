@@ -139,20 +139,16 @@ const PHRASINGS: Record<string, Phrasing> = {
     kind: 'power',
     up: (n) => `${n} has grown wealthier.`,
     down: (n) => `${n}'s coffers are thinning.`,
-    // Every directional entry carries a flat form too. A caller that did
-    // not select previousValue/newValue (the absence journal does not)
-    // still deserves a sentence, and falling through to a category
-    // fallback would make the recap vaguer than it was before this table
-    // existed. The flat wording is #396's.
+    // Flat forms are LAST resort now, reached only when the field layer
+    // has no entry for the field. Kept on the directional entries anyway:
+    // a field that loses its FIELD_LINES line later should degrade to a
+    // sentence rather than to a category fallback.
     flat: (n) => `${n}'s fortunes shifted.`,
   },
   'faction.stability': {
     kind: 'power',
     up: (n) => `${n} has steadied itself.`,
     down: (n) => `${n} is fraying at the edges.`,
-    // #396's line was `${n} grew less steady.` unconditionally, which was
-    // wrong half the time — the same row is written when stability RISES.
-    // Directional above; neutral here.
     flat: (n) => `${n}'s footing changed.`,
   },
   'faction.influence': {
@@ -300,7 +296,11 @@ export const SILENT_TYPES = new Set([
  * something sensible out of this layer too.
  */
 const FIELD_LINES: Record<string, { kind: WorldEventKind; texts: Array<(name: string) => string> }> = {
-  warDeclared: { kind: 'war', texts: [(n) => `${n} went to war while you were away.`] },
+  // #396's line was `${n} went to war while you were away.` — true of a
+  // recap and false in the chronicle, which reads the same table. The two
+  // absence-voiced lines in this set are neutralised rather than
+  // duplicated per caller; nothing here may assume the reader was gone.
+  warDeclared: { kind: 'war', texts: [(n) => `${n} went to war.`] },
   warResolved: { kind: 'war', texts: [(n) => `${n}'s war came to an end.`] },
   warEnded: { kind: 'war', texts: [(n) => `${n}'s war came to an end.`] },
   collapsed: { kind: 'power', texts: [(n) => `${n} fell apart entirely.`] },
@@ -311,7 +311,7 @@ const FIELD_LINES: Record<string, { kind: WorldEventKind; texts: Array<(name: st
   resources: { kind: 'power', texts: [(n) => `${n}'s fortunes shifted.`] },
   stability: { kind: 'power', texts: [(n) => `${n}'s footing changed.`] },
   weather: { kind: 'place', texts: [(n) => `The weather over ${n} turned.`] },
-  conditionScore: { kind: 'place', texts: [(n) => `${n} is not in the state you left it.`] },
+  conditionScore: { kind: 'place', texts: [(n) => `${n} is not in the state it was.`] },
   population: {
     kind: 'place',
     texts: [(n) => `People moved through ${n} — it is busier or emptier than it was.`],
@@ -348,20 +348,29 @@ export function phraseWorldEventVariants(
   if (!name) return null
 
   const phrasing = PHRASINGS[event.type]
-  if (phrasing) {
-    const direction = changeDirection(event.previousValue, event.newValue)
-    const render =
-      (direction === 'up' && phrasing.up) ||
-      (direction === 'down' && phrasing.down) ||
-      phrasing.flat ||
-      null
-    if (render) return { texts: [render(name)], kind: phrasing.kind }
-  }
 
-  // Fall through to the field layer rather than returning null: a type the
-  // first table has no key for may still be a field the second one knows.
+  // The type layer wins ONLY when it actually read a direction, which is
+  // the one thing it knows that the field layer cannot.
+  //
+  // This ordering is the fix for a regression the first version shipped.
+  // `phrasing.flat` used to sit in this chain, so for any caller that
+  // selects no values — the absence journal selects none — the type
+  // layer's flat form shadowed the migrated FIELD_LINES entirely. Four of
+  // #396's reviewed lines silently changed wording, and the commit
+  // claiming otherwise was wrong. It also left most of FIELD_LINES dead
+  // code: reachable only for the handful of fields the type layer has no
+  // key for at all.
+  const direction = changeDirection(event.previousValue, event.newValue)
+  const directional =
+    (direction === 'up' && phrasing?.up) || (direction === 'down' && phrasing?.down) || null
+  if (directional && phrasing) return { texts: [directional(name)], kind: phrasing.kind }
+
   const byField = FIELD_LINES[fieldOf(event.type)]
   if (byField) return { texts: byField.texts.map((t) => t(name)), kind: byField.kind }
+
+  // Last resort: a type the field layer does not know, with no direction
+  // to read. `npc.jointScheme` and `clock.spawned` live here.
+  if (phrasing?.flat) return { texts: [phrasing.flat(name)], kind: phrasing.kind }
 
   return null
 }

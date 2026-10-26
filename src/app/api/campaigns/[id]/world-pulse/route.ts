@@ -33,18 +33,13 @@ import { prisma } from '@/lib/prisma'
 import { getUser } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { loadAbsenceJournal } from '@/lib/game/absenceJournalQuery'
-import { describeJournalEntry, CATEGORY_LABELS } from '@/lib/game/absenceJournal'
-
-/**
- * How many lines a pulse offers.
- *
- * Far below MAX_JOURNAL_ENTRIES (12). This is a glance at the edge of a
- * scene the player is in the middle of, not a reconstruction of an
- * absence — and the coverage-first selection means the few it does show
- * are drawn from different categories rather than being four weather
- * lines.
- */
-export const MAX_PULSE_ENTRIES = 4
+// MAX_PULSE_ENTRIES is NOT exported from here: a route.ts may only export
+// the names Next.js reserves, and exporting it failed `next build`.
+import {
+  describeJournalEntry,
+  CATEGORY_LABELS,
+  MAX_PULSE_ENTRIES,
+} from '@/lib/game/absenceJournal'
 
 export async function GET(
   request: NextRequest,

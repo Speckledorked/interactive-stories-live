@@ -104,6 +104,17 @@ export interface JournalEntry extends JournalEventInput {
 /** How many entries a reconstruction offers. Twelve, not five: see below. */
 export const MAX_JOURNAL_ENTRIES = 12
 
+/**
+ * How many entries the mid-session pulse offers (#523).
+ *
+ * Far below MAX_JOURNAL_ENTRIES: a glance at the edge of a scene the
+ * player is in the middle of, not a reconstruction of an absence. Lives
+ * here rather than in the route that uses it because a Next.js route.ts
+ * may only export the names the framework reserves — exporting it there
+ * failed `next build`, which `tsc` cannot see.
+ */
+export const MAX_PULSE_ENTRIES = 4
+
 export function categoryOf(targetType: string): AbsenceCategory | null {
   return CATEGORY_BY_TARGET_TYPE[targetType] ?? null
 }

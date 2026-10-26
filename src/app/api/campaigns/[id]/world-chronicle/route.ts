@@ -32,20 +32,10 @@ import { getUser } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { buildWorldEventFog } from '@/lib/api/worldEventFog'
 import { phraseWorldEvent } from '@/lib/game/worldEventPhrasing'
+// Not exported from this file: a route.ts may only export the names Next.js
+// reserves, and exporting these here failed `next build`. See the module.
+import { CHRONICLE_PAGE_SIZE, CHRONICLE_SCAN } from '@/lib/game/worldChronicle'
 
-/** Entries returned per page. */
-export const CHRONICLE_PAGE_SIZE = 30
-
-/**
- * Rows read per page before filtering.
- *
- * Both the fog pass and the phrasing drop rows after the query, so taking
- * exactly the page size would return short pages and, worse, stop early:
- * a page that filtered down to zero would look like the end of history.
- * Scanning wider and reporting the real cursor keeps "is there more"
- * answerable from the rows actually read.
- */
-const CHRONICLE_SCAN = CHRONICLE_PAGE_SIZE * 6
 
 export async function GET(
   request: NextRequest,

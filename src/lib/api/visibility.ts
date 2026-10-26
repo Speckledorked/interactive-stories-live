@@ -83,3 +83,20 @@ export function visibleTo(model: FogGatedModel, role: CampaignRole): Record<stri
  * name index, for instance, which asks all four the same question.
  */
 export const FOG_GATED_MODELS = Object.keys(FOG_COLUMN) as FogGatedModel[]
+
+/**
+ * The Prisma client accessor for each fog-gated model.
+ *
+ * Only NPC differs, and it differs in a way nobody guesses right first
+ * time (`prisma.nPC`). Stated once here so a caller that iterates
+ * FOG_GATED_MODELS to build a set of visible ids — world-digest.ts,
+ * absenceJournalQuery.ts, worldEventFog.ts — does not need its own
+ * spelling table. Plain strings, so this file stays free of the Prisma
+ * import for the reason the module doc gives.
+ */
+export const FOG_PRISMA_MODEL: Record<FogGatedModel, 'nPC' | 'faction' | 'location' | 'clock'> = {
+  npc: 'nPC',
+  faction: 'faction',
+  location: 'location',
+  clock: 'clock',
+}

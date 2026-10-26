@@ -25,6 +25,8 @@ vi.mock('@/lib/prisma', () => ({
     worldEvent: { findMany: vi.fn(), aggregate: vi.fn() },
     faction: { findMany: vi.fn() },
     nPC: { findMany: vi.fn() },
+    location: { findMany: vi.fn() },
+    clock: { findMany: vi.fn() },
   },
 }))
 vi.mock('@/lib/ai/chatCompletion', () => ({ callChatCompletion: vi.fn() }))
@@ -64,27 +66,46 @@ beforeEach(() => {
   db.worldEvent.aggregate.mockResolvedValue({ _count: { _all: 0 }, _min: { turnNumber: null }, _max: { turnNumber: null } })
   db.faction.findMany.mockResolvedValue([])
   db.nPC.findMany.mockResolvedValue([])
+  db.location.findMany.mockResolvedValue([])
+  db.clock.findMany.mockResolvedValue([])
   vi.mocked(callChatCompletion).mockResolvedValue({
     ok: true, status: 200, content: 'Rain on the flagstones.', usage: { prompt_tokens: 1, completion_tokens: 1 },
   } as never)
 })
 
 describe('the scene opener reads the durable record (#445)', () => {
+  const clockAdvance = {
+    id: 'w1', turnNumber: 12, createdAt: new Date('2026-02-02'),
+    targetType: 'CLOCK', targetId: 'k1', targetName: 'The Siege of Ore Hills',
+    field: 'currentTicks', significant: true, importance: 'MAJOR',
+  }
+
   it('reaches a clock advance that produced no TimelineEvent at all', async () => {
     // The exact gap. Nothing narrated this; TimelineEvent is empty. Before
     // this fix the opener had no way to know it happened.
-    db.worldEvent.findMany.mockResolvedValue([
-      {
-        id: 'w1', turnNumber: 12, createdAt: new Date('2026-02-02'),
-        targetType: 'CLOCK', targetId: 'k1', targetName: 'The Siege of Ore Hills',
-        field: 'currentTicks', significant: true, importance: 'MAJOR',
-      },
-    ])
+    db.worldEvent.findMany.mockResolvedValue([clockAdvance])
+    // #524: and the thread has to be one the party can see. This read is
+    // at PLAYER grade deliberately (see sceneIntro.ts) because the text
+    // becomes atmosphere the party experiences.
+    db.clock.findMany.mockResolvedValue([{ id: 'k1' }])
 
     await generateNewSceneIntro('camp1')
 
     expect(promptSent()).toContain('OFFSCREEN DEVELOPMENTS')
     expect(promptSent()).toContain('The Siege of Ore Hills')
+  })
+
+  it('does not put an unrevealed thread in the opener', async () => {
+    // #524: clocks were ungated, so a hidden thread's name became
+    // atmosphere the party heard. This test is the reason the gate is not
+    // merely belt-and-braces: unlike the digest, nothing here filters on
+    // an authored phrasing, so a clock row reaches the prompt directly.
+    db.worldEvent.findMany.mockResolvedValue([clockAdvance])
+    db.clock.findMany.mockResolvedValue([])
+
+    await generateNewSceneIntro('camp1')
+
+    expect(promptSent()).not.toContain('The Siege of Ore Hills')
   })
 
   it('scans from the last scene, not from the start of the campaign', async () => {
@@ -144,6 +165,9 @@ describe('the scene opener reads the durable record (#445)', () => {
         field: 'currentTicks', significant: true, importance: 'MAJOR',
       }))
     )
+    // #524: all twelve threads visible, so the cap is what bounds the
+    // list rather than the fog.
+    db.clock.findMany.mockResolvedValue(Array.from({ length: 12 }, (_, i) => ({ id: `k${i}` })))
 
     await generateNewSceneIntro('camp1')
 

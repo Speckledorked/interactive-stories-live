@@ -47,6 +47,7 @@
 
 import type { WorldEventTargetType } from '@prisma/client'
 import { stableHash } from '@/lib/game/tick/types'
+import { phraseWorldEventVariants } from './worldEventPhrasing'
 
 /**
  * Player-facing groupings of WorldEvent.targetType. Deliberately coarser
@@ -252,25 +253,18 @@ export function buildAbsenceJournal(
 // target it has not revealed" is not). world-digest.ts already learned this
 // and builds its lines from a per-field template plus the entity name only.
 // Same discipline here — nothing below ever touches `reason`.
-
-const FIELD_LINES: Record<string, (name: string) => string[]> = {
-  warDeclared: (n) => [`${n} went to war while you were away.`],
-  warResolved: (n) => [`${n}'s war came to an end.`],
-  warEnded: (n) => [`${n}'s war came to an end.`],
-  collapsed: (n) => [`${n} fell apart entirely.`],
-  founded: (n) => [`${n} rose to prominence.`],
-  leader: (n) => [`${n} answers to new leadership now.`],
-  leadership: (n) => [`${n} answers to new leadership now.`],
-  factionRole: (n) => [`${n} answers to new leadership now.`],
-  resources: (n) => [`${n}'s fortunes shifted.`],
-  stability: (n) => [`${n} grew less steady.`],
-  weather: (n) => [`The weather over ${n} turned.`],
-  conditionScore: (n) => [`${n} is not in the state you left it.`],
-  population: (n) => [`People moved through ${n} — it is busier or emptier than it was.`],
-  currentTicks: (n) => [`The clock on ${n} moved closer to striking.`],
-  status: (n) => [`${n}'s standing changed.`],
-  goal: (n) => [`${n} is pursuing something new.`],
-}
+//
+// #520/#522: the per-field table that used to live here is now
+// worldEventPhrasing.ts, which the per-character knowledge surface needs
+// too. It moved rather than being copied, and this file's own FIELD_LINES
+// copy is gone — two tables phrasing the same column for players is what
+// consequenceLabels.ts's comment forbids. The shared module gained a
+// direction-aware layer on top of these lines, so an event whose caller
+// selected previousValue/newValue now reads "grew wealthier" rather than
+// the neutral "fortunes shifted"; this caller selects neither, so it gets
+// the same lines it always did. One wording DID change on purpose:
+// `stability` used to say "grew less steady" unconditionally, which was
+// wrong every time the row was written because stability ROSE.
 
 const CATEGORY_FALLBACK: Record<AbsenceCategory, (name: string) => string> = {
   wars: (n) => `Something shifted in the war around ${n}.`,
@@ -289,9 +283,20 @@ const CATEGORY_FALLBACK: Record<AbsenceCategory, (name: string) => string> = {
  * world having changed again.
  */
 export function describeJournalEntry(entry: JournalEntry): string {
-  const variants = FIELD_LINES[entry.field]?.(entry.targetName)
-  if (!variants || variants.length === 0) return CATEGORY_FALLBACK[entry.category](entry.targetName)
-  return variants[stableHash(entry.id) % variants.length]
+  // No values are selected for a journal entry, so the shared module's
+  // direction layer cannot fire and these resolve to the same field lines
+  // this file used to hold.
+  const phrased = phraseWorldEventVariants({
+    type: `${String(entry.targetType).toLowerCase()}.${entry.field}`,
+    targetName: entry.targetName,
+  })
+  // CATEGORY_FALLBACK stays here rather than moving with the lines: it is
+  // keyed on an AbsenceCategory, which is this file's own classification
+  // of an event and not a property of the event itself.
+  if (!phrased || phrased.texts.length === 0) {
+    return CATEGORY_FALLBACK[entry.category](entry.targetName)
+  }
+  return phrased.texts[stableHash(entry.id) % phrased.texts.length]
 }
 
 /** Human label for a category heading. */

@@ -19,6 +19,12 @@ vi.mock('@/lib/prisma', () => ({
     clock: { findMany: vi.fn() },
     campaignMembership: { findFirst: vi.fn() },
     character: { findFirst: vi.fn() },
+    // #521: the four previously unread tables. Only queried when there is
+    // at least one visible faction/location, so the existing tests above
+    // (which discover none) never reach them.
+    factionDebt: { findMany: vi.fn() },
+    supplyRoute: { findMany: vi.fn() },
+    populationFlightEvent: { groupBy: vi.fn() },
   },
 }))
 
@@ -50,6 +56,9 @@ beforeEach(() => {
   db.location.findMany.mockResolvedValue([])
   db.clock.findMany.mockResolvedValue([])
   db.character.findFirst.mockResolvedValue(null)
+  db.factionDebt.findMany.mockResolvedValue([])
+  db.supplyRoute.findMany.mockResolvedValue([])
+  db.populationFlightEvent.groupBy.mockResolvedValue([])
 })
 
 describe('GET', () => {
@@ -350,5 +359,116 @@ describe('GET entity stats', () => {
     expect(db.faction.findMany).not.toHaveBeenCalled()
     expect(db.location.findMany).not.toHaveBeenCalled()
     expect(db.clock.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET — connections (#521)', () => {
+  it("attaches a faction's outstanding debts, banded and without the amount", async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'FACTION', name: 'The Iron Company' }])
+    db.faction.findMany.mockResolvedValue([
+      { id: 'f-iron', name: 'The Iron Company' },
+      { id: 'f-thorn', name: 'The Circle of Thorns' },
+    ])
+    db.factionDebt.findMany.mockResolvedValue([
+      { creditorFactionId: 'f-thorn', debtorFactionId: 'f-iron', amount: 40 },
+    ])
+
+    const body = await (await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })).json()
+    const entry = body.entries.find((e: any) => e.name === 'The Iron Company')
+
+    expect(entry.connections.owes).toHaveLength(1)
+    expect(entry.connections.owes[0].faction).toBe('The Circle of Thorns')
+    expect(entry.connections.owes[0].weight).not.toMatch(/\d/)
+    expect(entry.connections.owes[0].amount).toBeNull()
+  })
+
+  it('drops a debt owed to a faction the party has not discovered', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'FACTION', name: 'The Iron Company' }])
+    // Only the near end is visible. The debt row still loads (either end
+    // matching is enough for the query) and must be dropped in shaping.
+    db.faction.findMany.mockResolvedValue([{ id: 'f-iron', name: 'The Iron Company' }])
+    db.factionDebt.findMany.mockResolvedValue([
+      { creditorFactionId: 'f-hidden', debtorFactionId: 'f-iron', amount: 40 },
+    ])
+
+    const body = await (await GET(getRequest('?type=FACTION'), { params: { id: 'camp1' } })).json()
+    const entry = body.entries.find((e: any) => e.name === 'The Iron Company')
+
+    expect(entry.connections.owes).toEqual([])
+    expect(entry.connections.owed).toEqual([])
+  })
+
+  it("reports a location cut off when every route it knows of is blockaded", async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'LOCATION', name: 'Thornkeep' }])
+    db.location.findMany.mockResolvedValue([
+      { id: 'loc-keep', name: 'Thornkeep' },
+      { id: 'loc-mill', name: 'Sutter Mill' },
+    ])
+    db.supplyRoute.findMany.mockResolvedValue([
+      { fromLocationId: 'loc-keep', toLocationId: 'loc-mill', isBlockaded: true },
+    ])
+
+    const body = await (await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })).json()
+    const entry = body.entries.find((e: any) => e.name === 'Thornkeep')
+
+    expect(entry.connections.cutOff).toBe(true)
+    expect(entry.connections.routes).toEqual([{ to: 'Sutter Mill', blockaded: true }])
+  })
+
+  it("names an NPC's allies but not one the party has never met", async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'NPC', name: 'Elder Rowan' }])
+    db.nPC.findMany.mockResolvedValue([
+      {
+        id: 'npc-rowan',
+        name: 'Elder Rowan',
+        tiesAsA: [{ npcAId: 'npc-rowan', npcBId: 'npc-mira', type: 'ALLY', since: 1 }],
+        tiesAsB: [{ npcAId: 'npc-ghost', npcBId: 'npc-rowan', type: 'RIVAL', since: 1 }],
+      },
+      { id: 'npc-mira', name: 'Mira', tiesAsA: [], tiesAsB: [] },
+    ])
+
+    const body = await (await GET(getRequest('?type=NPC'), { params: { id: 'camp1' } })).json()
+    const entry = body.entries.find((e: any) => e.name === 'Elder Rowan')
+
+    expect(entry.connections.allies).toEqual(['Mira'])
+    // npc-ghost is not in the discovered set, so the rival tie is dropped.
+    expect(entry.connections.rivals).toEqual([])
+  })
+  it('bounds flight destinations per location, not campaign-wide', async () => {
+    // The bug this replaced: a campaign-wide `take: 50` spent before the
+    // per-location filter, so in a campaign whose busiest place was
+    // emptying every turn, every other location silently lost its
+    // "Leaving for" line.
+    db.wikiEntry.findMany.mockResolvedValue([
+      { entryType: 'LOCATION', name: 'Thornkeep' },
+      { entryType: 'LOCATION', name: 'Greyford' },
+    ])
+    db.location.findMany.mockResolvedValue([
+      { id: 'loc-keep', name: 'Thornkeep' },
+      { id: 'loc-ford', name: 'Greyford' },
+      { id: 'loc-mill', name: 'Sutter Mill' },
+    ])
+    db.populationFlightEvent.groupBy.mockResolvedValue([
+      { fromLocationId: 'loc-keep', toLocationId: 'loc-mill', _max: { turnNumber: 9 } },
+      { fromLocationId: 'loc-ford', toLocationId: 'loc-mill', _max: { turnNumber: 2 } },
+    ])
+
+    const body = await (await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })).json()
+    const keep = body.entries.find((e: any) => e.name === 'Thornkeep')
+    const ford = body.entries.find((e: any) => e.name === 'Greyford')
+
+    // The older row still reaches its own location's card.
+    expect(keep.connections.fleeingTo).toEqual(['Sutter Mill'])
+    expect(ford.connections.fleeingTo).toEqual(['Sutter Mill'])
+  })
+
+  it('asks the database to collapse repeat flights rather than de-duplicating in memory', async () => {
+    db.wikiEntry.findMany.mockResolvedValue([{ entryType: 'LOCATION', name: 'Thornkeep' }])
+    db.location.findMany.mockResolvedValue([{ id: 'loc-keep', name: 'Thornkeep' }])
+    await GET(getRequest('?type=LOCATION'), { params: { id: 'camp1' } })
+
+    const args = db.populationFlightEvent.groupBy.mock.calls[0][0]
+    expect(args.by).toEqual(['fromLocationId', 'toLocationId'])
+    expect(args.orderBy).toEqual({ _max: { turnNumber: 'desc' } })
   })
 })

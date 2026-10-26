@@ -47,6 +47,10 @@ const COPY_GLOBS = [
   'src/lib/notifications/winBack.ts',
   'src/lib/ai/validation.ts',
   'src/lib/game/campaign-health.ts',
+  // #522: the whole module is player-facing sentences about the world. It
+  // lives in lib/game because three surfaces share it, which would
+  // otherwise exempt the one file in this repo that is nothing but copy.
+  'src/lib/game/worldEventPhrasing.ts',
 ]
 
 const EXCLUDED = ['src/app/admin/']

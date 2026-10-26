@@ -61,7 +61,7 @@ function Meter({
   )
 }
 
-function Tag({ children }: { children: React.ReactNode }) {
+export function Tag({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-full border border-myth-border bg-myth-surface-sunken px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-myth-ink-muted">
       {children}
@@ -70,7 +70,7 @@ function Tag({ children }: { children: React.ReactNode }) {
 }
 
 /** Takes display-ready labels — callers format their own vocabulary. */
-function TagRow({ tags }: { tags: string[] }) {
+export function TagRow({ tags }: { tags: string[] }) {
   const visible = tags.slice(0, MAX_VISIBLE_TAGS)
   const overflow = tags.length - visible.length
   return (

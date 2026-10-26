@@ -25,6 +25,7 @@ import type { WorldChange, TickEntityType } from '@/lib/game/tick/types'
 import { stableHash } from '@/lib/game/tick/types'
 import type { EventType, EventVisibility } from '@prisma/client'
 import type { SimTurn } from '@/lib/game/turnClock'
+import { visibleTo, FOG_PRISMA_MODEL, type FogGatedModel } from '@/lib/api/visibility'
 
 // At most this many rumor lines per turn — a digest, not a firehose.
 export const MAX_DIGEST_LINES = 3
@@ -48,11 +49,22 @@ export const MAX_DIGEST_LINES = 3
  * from never reaching players to reaching them UNGATED: a severe storm at
  * a location the party had never found was broadcast by name to everyone.
  *
- * Locations are gated here now, against discovered location ids. Clocks
- * are gated the other way round (`isHidden`) and emit no MAJOR digest
- * change today; if one is ever added it must be gated too, which is why
- * this set is keyed on the type rather than on "does this id happen to be
- * in the set".
+ * Locations are gated here now, against discovered location ids.
+ *
+ * #524: clocks too. The paragraph above used to end "clocks are gated the
+ * other way round (`isHidden`) and emit no MAJOR digest change today; if
+ * one is ever added it must be gated too" — correct about this file, and
+ * not enough, because this table has two other readers that filter
+ * differently. absenceJournalQuery.ts shows clock events without the
+ * MAJOR+significant gate, so `The thread on <name> moved closer to
+ * striking` reached players for threads the GM had not revealed; #520's
+ * knowledge surface then inherited the same hole. A set keyed on the type
+ * only protects the readers that share the type's filter, so the type is
+ * now gated rather than reasoned about.
+ *
+ * The values are visibility.ts's own FogGatedModel names, not Prisma
+ * accessors, so the inverted polarity is decided by visibleTo() in one
+ * place instead of by whoever writes the next id query.
  */
 /**
  * Each gated entity type, and the model whose discovered rows supply the
@@ -68,21 +80,28 @@ export const MAX_DIGEST_LINES = 3
  *
  * Adding a type here now brings its id source with it, because there is
  * only one place to add it.
+ *
+ * #520: exported, because the per-character knowledge surface
+ * (lib/api/worldEventFog.ts) is a third reader of WorldEvent that needs
+ * the identical answer. It shipped with its own hand-written copy of this
+ * mapping and a different one — the exact two-independent-lists shape the
+ * paragraph above is about.
  */
-const DISCOVERY_SOURCE_BY_ENTITY_TYPE = {
-  NPC: 'nPC',
+export const DISCOVERY_SOURCE_BY_ENTITY_TYPE = {
+  NPC: 'npc',
   FACTION: 'faction',
   LOCATION: 'location',
   LOCATION_WEATHER: 'location',
   LOCATION_CONDITION: 'location',
   LOCATION_POPULATION: 'location',
-} as const satisfies Partial<Record<TickEntityType, 'nPC' | 'faction' | 'location'>>
+  CLOCK: 'clock',
+} as const satisfies Partial<Record<TickEntityType, FogGatedModel>>
 
 /** The models to query for discovered ids — deduplicated, since the four
  * LOCATION* types all resolve through Location. */
 export const DISCOVERY_SOURCE_MODELS = [
   ...new Set(Object.values(DISCOVERY_SOURCE_BY_ENTITY_TYPE)),
-] as Array<'nPC' | 'faction' | 'location'>
+] as FogGatedModel[]
 
 export const DISCOVERY_GATED_ENTITY_TYPES: ReadonlySet<TickEntityType> = new Set(
   Object.keys(DISCOVERY_SOURCE_BY_ENTITY_TYPE) as TickEntityType[]
@@ -461,17 +480,25 @@ export async function sendWorldDigest(
   try {
     if (changes.length === 0) return 0
 
-    // Discovery gate: the union of discovered factions and NPCs. Only
-    // those two types model discovery at all — see
-    // DISCOVERY_GATED_ENTITY_TYPES for why building this set was not the
-    // bug, and testing every change against it was.
+    // Discovery gate: the union of visible rows across every gated model.
+    // See DISCOVERY_GATED_ENTITY_TYPES for why building this set was not
+    // the bug, and testing every change against it was.
+    //
     // Driven off DISCOVERY_SOURCE_MODELS rather than a hand-written list,
-    // so a type added to the gate cannot be missing its ids here.
+    // so a type added to the gate cannot be missing its ids here, and
+    // through visibleTo() rather than a literal `isDiscovered: true`,
+    // which is what lets #524 add CLOCK at all: a clock is visible when
+    // isHidden is FALSE, so the one-predicate-fits-all version would have
+    // silently inverted the gate for it.
     const [idSets, members] = await Promise.all([
       Promise.all(
         DISCOVERY_SOURCE_MODELS.map(model =>
-          (prisma[model] as { findMany: (args: unknown) => Promise<Array<{ id: string }>> }).findMany({
-            where: { campaignId, isDiscovered: true },
+          (
+            prisma[FOG_PRISMA_MODEL[model]] as {
+              findMany: (args: unknown) => Promise<Array<{ id: string }>>
+            }
+          ).findMany({
+            where: { campaignId, ...visibleTo(model, null) },
             select: { id: true },
           })
         )

@@ -821,6 +821,11 @@ export const OPAQUE_SHADOW: readonly string[] = [
   'NPC.currentPlan',
   'NPC.disposition',
   'PopulationFlightEvent.fromLocationId',
+  // #521: entered the shadow when the /world location card began reading
+  // where people are fleeing TO. migrationTick writes the row through a
+  // built createMany payload, so the write is real but not visible to the
+  // engine — same situation as fromLocationId above it.
+  'PopulationFlightEvent.toLocationId',
   'Quest.givenByFactionId',
   'Quest.givenByNpcId',
   'Quest.resolvedAt',

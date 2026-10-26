@@ -5,6 +5,8 @@ vi.mock('@/lib/prisma', () => ({
     faction: { findMany: vi.fn().mockResolvedValue([]) },
     nPC: { findMany: vi.fn().mockResolvedValue([]) },
     location: { findMany: vi.fn().mockResolvedValue([]) },
+    // #524: clocks are gated now, so the digest asks about them too.
+    clock: { findMany: vi.fn().mockResolvedValue([]) },
     campaignMembership: { findMany: vi.fn().mockResolvedValue([]) },
     timelineEvent: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
   },
@@ -15,11 +17,13 @@ vi.mock('../notification-service', () => ({
 }))
 
 import { prisma } from '@/lib/prisma'
+import { visibleTo, FOG_PRISMA_MODEL } from '@/lib/api/visibility'
 import { NotificationService } from '../notification-service'
 import {
   DISCOVERY_GATED_ENTITY_TYPES,
   DISCOVERY_SOURCE_MODELS,
   selectDigestChanges,
+  isRumorWorthy,
   groupDigestChangesByField,
   formatDigestLine,
   formatDigestGroupLine,
@@ -349,11 +353,11 @@ describe('selectDigestChanges — discovery is per entity TYPE (#395)', () => {
     }
   )
 
-  it.each(['CLOCK', 'QUEST', 'WAR', 'DEBT'] as const)(
+  it.each(['QUEST', 'WAR', 'DEBT'] as const)(
     'still surfaces a MAJOR %s change with an empty discovered set',
     (entityType) => {
-      // These four genuinely have no per-entity discovery for the digest to
-      // check — #395's actual finding, and it stands.
+      // These three genuinely have no per-entity discovery for the digest
+      // to check — #395's actual finding, and it stands for them.
       const selected = selectDigestChanges(
         [change({ entityType, entityId: 'x1', field: 'warDeclared' })],
         new Set<string>()
@@ -362,6 +366,39 @@ describe('selectDigestChanges — discovery is per entity TYPE (#395)', () => {
       expect(selected).toHaveLength(1)
     }
   )
+
+  it('hides a MAJOR CLOCK change for a thread the GM has not revealed', () => {
+    // #524: CLOCK used to be in the list above, on the reasoning that it
+    // "emits no MAJOR digest change today". A set keyed on the type only
+    // protects the readers that share the type's filter, and this table
+    // has two others that do not — absenceJournalQuery.ts shows clock
+    // events with no MAJOR gate at all, so "The thread on <name> moved
+    // closer to striking" named unrevealed threads.
+    const selected = selectDigestChanges(
+      [change({ entityType: 'CLOCK', entityId: 'clock1', field: 'currentTicks' })],
+      new Set<string>()
+    )
+
+    expect(selected).toHaveLength(0)
+  })
+
+  it("does not emit a clock line even for a visible thread, because it has no phrasing", () => {
+    // Why the gate above is belt-and-braces rather than the live fix.
+    //
+    // #432's isRumorWorthy means only fields with an authored LINE
+    // generator reach a digest, and no clock field has one — so the digest
+    // emits nothing about clocks either way. The gate is still correct to
+    // add (a future clock line inherits it instead of needing to remember
+    // it), but the surface that was actually leaking is the absence
+    // journal, which applies no such filter.
+    const visible = selectDigestChanges(
+      [change({ entityType: 'CLOCK', entityId: 'clock1', field: 'currentTicks' })],
+      new Set<string>(['clock1'])
+    )
+
+    expect(visible).toHaveLength(0)
+    expect(isRumorWorthy(change({ entityType: 'CLOCK', field: 'currentTicks' }))).toBe(false)
+  })
 
   it('still hides an undiscovered faction', () => {
     // The gate is narrower, not gone: types that DO model discovery are
@@ -508,9 +545,16 @@ describe('the discovery gate and its id source cannot drift (#432 regression)', 
 
     // Not "queries location" — every model the gate depends on, whatever
     // that set becomes later.
+    //
+    // #524: the predicate comes from visibleTo() rather than a literal
+    // `isDiscovered: true`, and the expectation is built the same way. A
+    // hardcoded literal here would have passed while the query inverted
+    // the gate for clocks, which is exactly the leak being fixed.
     for (const model of DISCOVERY_SOURCE_MODELS) {
-      expect(prisma[model].findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { campaignId: 'campaign-1', isDiscovered: true } })
+      expect(prisma[FOG_PRISMA_MODEL[model]].findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { campaignId: 'campaign-1', ...visibleTo(model, null) },
+        })
       )
     }
   })

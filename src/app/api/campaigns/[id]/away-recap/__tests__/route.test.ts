@@ -27,6 +27,11 @@ vi.mock('@/lib/prisma', () => ({
     },
     faction: { findMany: vi.fn() },
     nPC: { findMany: vi.fn() },
+    // #524: the discovered-id set is built from every fog-gated model
+    // now, not just factions and NPCs — which is what finally gates
+    // clocks and what un-blacks-out locations.
+    location: { findMany: vi.fn() },
+    clock: { findMany: vi.fn() },
     campaignMembership: { update: vi.fn(), updateMany: vi.fn(async () => ({ count: 1 })) },
   },
 }))
@@ -62,6 +67,8 @@ beforeEach(() => {
   db.worldEvent.findMany.mockResolvedValue([])
   db.faction.findMany.mockResolvedValue([])
   db.nPC.findMany.mockResolvedValue([])
+  db.location.findMany.mockResolvedValue([])
+  db.clock.findMany.mockResolvedValue([])
   db.campaignMembership.update.mockResolvedValue({})
 })
 
@@ -142,6 +149,9 @@ describe('GET', () => {
         field: 'currentTicks', significant: true, importance: 'MAJOR',
       },
     ])
+    // #524: clocks are fog-gated now, so the thread has to be one the
+    // party can see for its name to reach them.
+    db.clock.findMany.mockResolvedValue([{ id: 'k1' }])
 
     const response = await GET(req(), { params: { id: 'camp1' } })
     const body = await response.json()
@@ -232,6 +242,9 @@ describe('GET', () => {
         field: 'currentTicks', significant: true, importance: 'MAJOR',
       },
     ])
+    // #524: clocks are fog-gated now, so the thread has to be one the
+    // party can see for its name to reach them.
+    db.clock.findMany.mockResolvedValue([{ id: 'k1' }])
     db.worldEvent.aggregate.mockRejectedValueOnce(new Error('db down'))
 
     const response = await GET(req(), { params: { id: 'camp1' } })

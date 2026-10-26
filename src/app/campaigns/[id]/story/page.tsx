@@ -28,6 +28,7 @@ import { TurnOrderPanel } from '@/components/scene/TurnOrderPanel'
 import { MapViewerPanel } from '@/components/scene/MapViewerPanel'
 import { SceneChatPanel } from '@/components/scene/SceneChatPanel'
 import { ActiveClocksPanel } from '@/components/scene/ActiveClocksPanel'
+import { WorldPulsePanel } from '@/components/scene/WorldPulsePanel'
 import { RecentTimelinePanel } from '@/components/scene/RecentTimelinePanel'
 import { BookOpen, Bookmark, ChevronRight, Clock, Eye, Home, Hourglass, Keyboard, Loader, Lock, Map as MapIcon, MessageSquare, Pause, Scroll, Search, Settings as SettingsIcon, StickyNote, X } from 'lucide-react'
 import { TavernPage } from '@/components/tavern/TavernPage'
@@ -1933,6 +1934,11 @@ export default function StoryPage() {
           />
 
           <ActiveClocksPanel clocks={campaign?.campaign?.clocks} campaignId={campaignId} />
+
+          {/* #523: the world does not stop while a scene runs, and until
+              now nothing said so mid-session. Windowed on the scene, so
+              it resets when a new one starts. */}
+          <WorldPulsePanel campaignId={campaignId} sceneId={currentScene?.id} />
 
           <RecentTimelinePanel timeline={campaign?.campaign?.timeline} campaignId={campaignId} />
         </div>

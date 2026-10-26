@@ -44,6 +44,52 @@ export interface ReleaseNote {
  */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    id: 'what-your-character-knows',
+    version: '1.3',
+    date: '2026-10-26',
+    title: 'What your character knows',
+    body: [
+      'The world has always kept track of who was standing where when something happened, and of how word travels afterwards — by how near you were to it, and by who you know. None of that ever reached you. Your character knew things and you had no way to ask what.',
+      'Your sheet now has it. Two lists: what you were there for, and what reached you later. The first is what you saw with your own eyes. The second is what somebody told you, which is a different kind of knowing — it arrives late, it arrives through people, and some of it is wrong.',
+      'When a story does not quite add up, you will be told that much and no more. You will not be told which way it has been bent, because your character cannot tell either. That is the point of hearing things secondhand.',
+      'What you know is yours. Nobody else at the table can read your lists, and you cannot read theirs — so what the party collectively knows is something you have to work out by talking to each other, the way it would be.',
+    ],
+  },
+  {
+    id: 'the-world-does-not-pause-for-your-scene',
+    version: '1.3',
+    date: '2026-10-26',
+    title: 'The world does not pause for your scene',
+    body: [
+      'Sit in a scene for a while and the world takes a turn of its own around you. It always did. Nothing said so until you got up and left, and then a letter told you about it.',
+      'There is now a short note in the margin of your scene: what moved out there since you sat down. A few lines, drawn from different corners of the world rather than from whichever corner happens to be noisiest, and nothing at all when nothing happened.',
+      'It resets when a new scene begins, so it is always answering the same question — what has changed while I have been here — rather than quietly accumulating.',
+    ],
+  },
+  {
+    id: 'a-chronicle-of-the-world-itself',
+    version: '1.3',
+    date: '2026-10-26',
+    title: 'A chronicle of the world itself',
+    body: [
+      'Your story log holds what you did. There was nowhere to read what the world did — the wars that started while you were elsewhere, the places that emptied, the powers that lost their footing. The letter waiting for you after a long absence covered some of it, briefly, and then it was gone.',
+      'The whole record is now readable, newest first, as far back as it goes. It is grouped by the world\u2019s own turns, because eight things happening at once is different from eight things happening one after another, and a flat list loses that.',
+      'The letter you get after an absence has also stopped skipping places. Weather, ruin, crowds and quiet were being recorded and left out of it; they are in it now.',
+    ],
+  },
+  {
+    id: 'who-owes-whom-and-what-cannot-get-through',
+    version: '1.3',
+    date: '2026-10-26',
+    title: 'Who owes whom, and what cannot get through',
+    body: [
+      'Powers borrow from each other and fall behind on it. Roads carry goods until somebody closes them. People leave a place and go somewhere specific. All of this has been happening every turn and none of it was anywhere you could look.',
+      'The World pages now show it. A power\u2019s page says who it owes and who owes it, in plain terms rather than figures. A place\u2019s page says what still reaches it, what has been cut, and where its people have been going — and says plainly when nothing can get through at all, which is the sort of thing worth knowing before you ride there.',
+      'A person\u2019s page says who they count as a friend and who they count as a rival, which is also how word gets to them.',
+      'Only what you have actually found is named. A power\u2019s debt to somebody you have never heard of is not listed as a debt to somebody you have never heard of; it is simply not there yet.',
+    ],
+  },
+  {
     id: 'worlds-you-can-hand-to-someone-else',
     version: '1.2',
     date: '2026-10-01',

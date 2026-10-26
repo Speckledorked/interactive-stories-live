@@ -21,7 +21,8 @@ vi.mock('@/lib/prisma', () => ({
 import { getUser } from '@/lib/auth'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { prisma } from '@/lib/prisma'
-import { GET, CHRONICLE_PAGE_SIZE } from '../route'
+import { GET } from '../route'
+import { CHRONICLE_PAGE_SIZE } from '@/lib/game/worldChronicle'
 
 const db = prisma as any
 const params = { params: { id: 'camp1' } }

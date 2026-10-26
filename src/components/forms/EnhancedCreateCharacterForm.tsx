@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { authenticatedFetch } from '@/lib/clientAuth'
 import { PBTA_STATS } from '@/lib/pbta-moves'
+import { archetypeLoadout, type ArchetypeCard } from '@/lib/game/archetypeLoadout'
 import { parseAdvancementTrack } from '@/lib/game/advancementTrack'
 import { CONSEQUENCE_LABELS } from '@/lib/game/consequenceLabels'
 import { Textarea } from '@/components/ui/textarea'
@@ -127,21 +128,11 @@ export default function EnhancedCreateCharacterForm({
   // campaign creation. Picking one pre-fills the wizard; "start from
   // scratch" always remains available (and is the only path for campaigns
   // whose generation produced no cards).
-  interface ArchetypeCard {
-    id: string
-    name: string
-    description: string
-    originFamiliarity: 'NATIVE' | 'NEWCOMER' | 'OUTSIDER'
-    suggestedStats: Record<string, number> | null
-    startingGear: {
-      weapon?: string
-      armor?: string
-      misc?: string
-      items?: Array<{ name: string; quantity: number; tags: string[] }>
-    } | null
-    startingTie: { description?: string } | null
-    backstoryPrompts: string[]
-  }
+  //
+  // #508: the card shape and the mapping below both moved to
+  // lib/game/archetypeLoadout.ts, because the quick-start path needs the
+  // identical mapping and this one was only reachable from inside this
+  // form.
   const [archetypes, setArchetypes] = useState<ArchetypeCard[]>([])
   const [selectedArchetypeId, setSelectedArchetypeId] = useState<string | null>(null)
 
@@ -276,22 +267,22 @@ export default function EnhancedCreateCharacterForm({
 
   const applyArchetype = (archetype: ArchetypeCard) => {
     setSelectedArchetypeId(archetype.id)
+    const loadout = archetypeLoadout(archetype)
     setFormData(prev => ({
       ...prev,
-      originFamiliarity: archetype.originFamiliarity,
-      ...(archetype.suggestedStats
-        ? { stats: { ...prev.stats, ...archetype.suggestedStats } }
-        : {}),
-      ...(archetype.startingGear
+      originFamiliarity: loadout.originFamiliarity,
+      ...(loadout.stats ? { stats: { ...prev.stats, ...loadout.stats } } : {}),
+      // Spread over what the player already has: the loadout carries only
+      // the slots the card actually names, so an archetype with a weapon
+      // and no armor no longer blanks an armor they had chosen. That was
+      // the old inline version's behaviour too, by way of `|| prev.x`;
+      // the difference is that it is now stated once and tested.
+      ...(loadout.equipment ? { equipment: { ...prev.equipment, ...loadout.equipment } } : {}),
+      ...(loadout.items
         ? {
-            equipment: {
-              weapon: archetype.startingGear.weapon || prev.equipment.weapon,
-              armor: archetype.startingGear.armor || prev.equipment.armor,
-              misc: archetype.startingGear.misc || prev.equipment.misc,
-            },
             inventory: {
               ...prev.inventory,
-              items: (archetype.startingGear.items || []).map((item, idx) => ({
+              items: loadout.items.map((item, idx) => ({
                 id: `archetype-${idx}-${Date.now()}`,
                 name: item.name,
                 quantity: item.quantity,

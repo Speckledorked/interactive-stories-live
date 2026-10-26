@@ -9,6 +9,7 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { authenticatedFetch, isAuthenticated, getUser, setLastCampaignId } from '@/lib/clientAuth'
 import EnhancedCreateCharacterForm from "@/components/forms/EnhancedCreateCharacterForm"
+import QuickStartCharacterForm from "@/components/forms/QuickStartCharacterForm"
 import ChatPanel from '@/components/chat/ChatPanel'
 import NotesPanel from '@/components/notes/NotesPanel'
 import { PlayerMapViewer } from '@/components/maps/PlayerMapViewer'
@@ -67,6 +68,12 @@ export default function CampaignLobbyPage() {
   const [showCreateCharacter, setShowCreateCharacter] = useState(
     searchParams.get('create') === 'character'
   )
+  // #508: which creation path the modal is showing. Starts on the quick
+  // one and only ever moves to 'full' — either because the player asked
+  // for it, or because this campaign has no archetype that carries stats.
+  // Not reset on close: someone who chose the detailed form once should
+  // not have to choose it again every time they open this.
+  const [characterMode, setCharacterMode] = useState<'quick' | 'full'>('quick')
   const [activeTab, setActiveTabState] = useState<LobbyTab>(initialTab)
 
   const setActiveTab = (tab: LobbyTab) => {
@@ -916,18 +923,40 @@ export default function CampaignLobbyPage() {
       {showCreateCharacter && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-2 sm:p-4">
           <div className="my-auto max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-myth-border bg-myth-surface-raised p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.16)] sm:max-h-[90vh] sm:p-6">
-            <h2 className="mb-4 font-display text-xl font-semibold text-myth-ink sm:text-2xl">Create New Character</h2>
-            <EnhancedCreateCharacterForm
-              campaignId={campaignId}
-              statLabels={campaign.statLabels}
-              advancementTrack={campaign.advancementTrack}
-              onSuccess={() => {
-                setShowCreateCharacter(false)
-                // Refresh characters list after creating a new one
-                loadCampaign()
-              }}
-              onCancel={() => setShowCreateCharacter(false)}
-            />
+            <h2 className="mb-4 font-display text-xl font-semibold text-myth-ink sm:text-2xl">
+              {characterMode === 'quick' ? 'Who are you?' : 'Create New Character'}
+            </h2>
+            {/* #508: the quick path first, the full wizard one click away.
+                Three of the six campaigns strangers started never got a
+                character at all, and six tabs before a first scene is the
+                most likely reason. QuickStartCharacterForm hands over by
+                itself when no archetype carries stats, so a campaign whose
+                generation produced nothing usable never sees an empty
+                chooser. */}
+            {characterMode === 'quick' ? (
+              <QuickStartCharacterForm
+                campaignId={campaignId}
+                onSuccess={() => {
+                  setShowCreateCharacter(false)
+                  loadCampaign()
+                }}
+                onCancel={() => setShowCreateCharacter(false)}
+                onWantsFullForm={() => setCharacterMode('full')}
+                onUnavailable={() => setCharacterMode('full')}
+              />
+            ) : (
+              <EnhancedCreateCharacterForm
+                campaignId={campaignId}
+                statLabels={campaign.statLabels}
+                advancementTrack={campaign.advancementTrack}
+                onSuccess={() => {
+                  setShowCreateCharacter(false)
+                  // Refresh characters list after creating a new one
+                  loadCampaign()
+                }}
+                onCancel={() => setShowCreateCharacter(false)}
+              />
+            )}
           </div>
         </div>
       )}

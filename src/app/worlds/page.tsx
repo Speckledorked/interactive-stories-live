@@ -24,6 +24,35 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { HEADER_OFFSET } from '@/components/tavern/headerOffset'
 import { fontDisplay } from '@/lib/fonts'
 import { pluralize } from '@/lib/format'
+import { isAuthenticated } from '@/lib/clientAuth'
+
+/**
+ * What an empty directory offers.
+ *
+ * The old copy said "any campaign you run", which answers somebody who
+ * already runs one. This page is public and unauthenticated, so most of
+ * the people reading an EMPTY version of it followed a link here and run
+ * nothing — and with the starter world deferred, an empty directory is
+ * the steady state rather than a gap that fills itself. So the empty
+ * state offers the one thing that actually works from here.
+ *
+ * Signed out it goes to signup and comes back: a stranger who has just
+ * decided they want in is the best moment to ask for an account, and
+ * losing their place would waste it. Same reasoning and the same returnTo
+ * as the fork button on a world's own page.
+ *
+ * `/campaigns` rather than a deep link straight into the creation modal.
+ * That modal honours no URL param the way the character one honours
+ * `?create=character`, and adding one means giving this route a
+ * useSearchParams boundary — more restructuring than one link is worth.
+ * The "New Campaign" button is the first thing on that page.
+ */
+function buildOneAction() {
+  return {
+    label: 'Build one',
+    href: isAuthenticated() ? '/campaigns' : `/signup?returnTo=${encodeURIComponent('/campaigns')}`,
+  }
+}
 
 interface WorldCard {
   slug: string
@@ -98,8 +127,9 @@ export default function WorldsPage() {
             description={
               query
                 ? 'Try a different word, or clear the search to see everything.'
-                : 'Be the first. Any campaign you run can be shared from its settings once it has factions or a power tree.'
+                : 'Be the first. Any world you build can be shared from here once it has powers and places in it — and until someone does, there is nothing on this page to start from.'
             }
+            action={query ? undefined : buildOneAction()}
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">

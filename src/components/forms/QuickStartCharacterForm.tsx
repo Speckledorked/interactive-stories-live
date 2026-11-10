@@ -128,6 +128,10 @@ export default function QuickStartCharacterForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name.trim(),
+          // #508: labels the analytics row only — the whole point of this
+          // path is measurable against the wizard. See lib/analytics/
+          // creationPath.ts on why a client-reported value is fine here.
+          creationPath: 'quick',
           // The server seeds capability glimpses and the starting tie from
           // this, so it is not merely a record of what was picked.
           archetypeId: card.id,

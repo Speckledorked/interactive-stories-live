@@ -11,6 +11,9 @@ vi.mock('@/lib/auth', () => ({ getUser: vi.fn() }))
 vi.mock('@/lib/auth/platformAdmin', () => ({ isPlatformAdminEmail: vi.fn() }))
 vi.mock('@/lib/analytics/events', () => ({
   getFunnelCounts: vi.fn(),
+  // #508: the world-arrival leak and the creation-path split.
+  getWorldCreationLeak: vi.fn(),
+  getCreationPathSplit: vi.fn(),
   getSignupsByDay: vi.fn(),
   getRetentionByCohortWeek: vi.fn(),
   getUserCampaignListing: vi.fn(),
@@ -26,7 +29,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { getUser } from '@/lib/auth'
 import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
-import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary, getAICostByDay } from '@/lib/analytics/events'
+import { getFunnelCounts, getWorldCreationLeak, getCreationPathSplit, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary, getAICostByDay } from '@/lib/analytics/events'
 import { prisma } from '@/lib/prisma'
 import { GET } from '../route'
 
@@ -41,6 +44,8 @@ beforeEach(() => {
   ;(getUser as any).mockResolvedValue({ userId: 'u1', email: 'admin@example.com' })
   ;(isPlatformAdminEmail as any).mockReturnValue(true)
   ;(getFunnelCounts as any).mockResolvedValue({})
+  ;(getWorldCreationLeak as any).mockResolvedValue({ usersAffected: 0, usersLeftWithNothing: 0 })
+  ;(getCreationPathSplit as any).mockResolvedValue({ quick: 0, full: 0, unspecified: 0 })
   ;(getSignupsByDay as any).mockResolvedValue([])
   ;(getRetentionByCohortWeek as any).mockResolvedValue([])
   ;(getUserCampaignListing as any).mockResolvedValue([])

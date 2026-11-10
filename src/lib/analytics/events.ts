@@ -3,11 +3,20 @@
 // query helpers behind the admin analytics dashboard
 // (/api/admin/analytics, src/app/admin/analytics).
 //
-// Five events cover the whole activation funnel: SIGNUP -> CAMPAIGN_CREATED
-// -> CHARACTER_CREATED -> SCENE_STARTED -> ACTION_SUBMITTED. The last one
+// The activation funnel: SIGNUP -> CAMPAIGN_CREATED -> WORLD_READY ->
+// CHARACTER_CREATED -> SCENE_STARTED -> ACTION_SUBMITTED. The last one
 // doubles as the retention/DAU signal — it's the most direct "did this
 // person actually play today" moment in the pipeline, firing every time
 // anyone submits a turn.
+//
+// #508 added WORLD_READY, and the reason is the gap it closes.
+// CAMPAIGN_CREATED fires at the point of INTENT (see api/campaigns/
+// route.ts), and since #493 the work happens in a queued job minutes
+// later. So a world that never generated and a player who lost interest
+// were indistinguishable: both recorded the ask, neither recorded an
+// arrival, and "they never made a character" covered both. WORLD_READY is
+// the arrival; WORLD_FAILED is the permanent failure, counted beside the
+// funnel rather than in it (see getWorldCreationLeak).
 
 import { prisma } from '@/lib/prisma'
 import { AnalyticsEventType } from '@prisma/client'
@@ -43,13 +52,18 @@ export async function recordEvent(
 export interface FunnelCounts {
   signups: number
   campaignsCreated: number
+  /** #508: worlds that actually arrived, not just were asked for. */
+  worldsReady: number
   charactersCreated: number
   scenesStarted: number
   actionsSubmitted: number
 }
 
+// Order IS the funnel's order — getFunnelCounts destructures positionally
+// and the dashboard renders them in sequence, so inserting a stage in the
+// wrong place would mislabel every number after it.
 const FUNNEL_TYPES: AnalyticsEventType[] = [
-  'SIGNUP', 'CAMPAIGN_CREATED', 'CHARACTER_CREATED', 'SCENE_STARTED', 'ACTION_SUBMITTED',
+  'SIGNUP', 'CAMPAIGN_CREATED', 'WORLD_READY', 'CHARACTER_CREATED', 'SCENE_STARTED', 'ACTION_SUBMITTED',
 ]
 
 // #313: this and getCampaignCostSummary's queries below were the only two
@@ -76,9 +90,82 @@ export async function getFunnelCounts(): Promise<FunnelCounts> {
       })
     )
   )
-  const [signups, campaignsCreated, charactersCreated, scenesStarted, actionsSubmitted] =
+  const [signups, campaignsCreated, worldsReady, charactersCreated, scenesStarted, actionsSubmitted] =
     counts.map(rows => rows.length)
-  return { signups, campaignsCreated, charactersCreated, scenesStarted, actionsSubmitted }
+  return { signups, campaignsCreated, worldsReady, charactersCreated, scenesStarted, actionsSubmitted }
+}
+
+export interface WorldCreationLeak {
+  /** Users who hit a permanent creation failure at least once. */
+  usersAffected: number
+  /** Of those, the ones who never went on to get a world at all. */
+  usersLeftWithNothing: number
+}
+
+/**
+ * How many people the product itself lost at world creation.
+ *
+ * Deliberately not a funnel stage. A failure is not a position in a
+ * sequence everyone passes through — a user can fail once, retry and
+ * succeed, and counting them as "stuck at the failure step" would be
+ * wrong. What matters is the subset who failed and NEVER got a world:
+ * those are people the product broke for, not people who left.
+ */
+export async function getWorldCreationLeak(): Promise<WorldCreationLeak> {
+  const since = new Date(Date.now() - ANALYTICS_TOTALS_LOOKBACK_DAYS * 86400_000)
+  const [failed, ready] = await Promise.all([
+    prisma.analyticsEvent.findMany({
+      where: { type: 'WORLD_FAILED', userId: { not: null }, createdAt: { gte: since } },
+      distinct: ['userId'],
+      select: { userId: true },
+    }),
+    prisma.analyticsEvent.findMany({
+      where: { type: 'WORLD_READY', userId: { not: null }, createdAt: { gte: since } },
+      distinct: ['userId'],
+      select: { userId: true },
+    }),
+  ])
+
+  const everSucceeded = new Set(ready.map(r => r.userId))
+  return {
+    usersAffected: failed.length,
+    usersLeftWithNothing: failed.filter(r => !everSucceeded.has(r.userId)).length,
+  }
+}
+
+export interface CreationPathSplit {
+  quick: number
+  full: number
+  /** Made before #508 shipped, or by a client that does not report a path. */
+  unspecified: number
+}
+
+/**
+ * Characters by the path they were made through (#508).
+ *
+ * Counts CHARACTERS, not distinct users, unlike the funnel above: the
+ * question is which route people reach for, and someone who makes three
+ * characters chose a path three times.
+ *
+ * Grouped in memory because the path lives in the row's Json metadata,
+ * which Postgres cannot group on through Prisma without raw SQL. Bounded
+ * by the same lookback as the other totals, so it stays a flat read.
+ */
+export async function getCreationPathSplit(): Promise<CreationPathSplit> {
+  const since = new Date(Date.now() - ANALYTICS_TOTALS_LOOKBACK_DAYS * 86400_000)
+  const rows = await prisma.analyticsEvent.findMany({
+    where: { type: 'CHARACTER_CREATED', createdAt: { gte: since } },
+    select: { metadata: true },
+  })
+
+  const split: CreationPathSplit = { quick: 0, full: 0, unspecified: 0 }
+  for (const row of rows) {
+    const path = (row.metadata as { path?: unknown } | null)?.path
+    if (path === 'quick') split.quick += 1
+    else if (path === 'full') split.full += 1
+    else split.unspecified += 1
+  }
+  return split
 }
 
 export interface DailyCount {

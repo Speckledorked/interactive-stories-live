@@ -331,6 +331,9 @@ export default function EnhancedCreateCharacterForm({
         },
         body: JSON.stringify({
           ...formData,
+          // #508: labels the analytics row only, so the short path can be
+          // measured against this one. See lib/analytics/creationPath.ts.
+          creationPath: 'full',
           // Server-side archetype seeding: extra capability glimpses + the
           // starting tie (a Debt or faction standing) into the living world.
           archetypeId: selectedArchetypeId || undefined,

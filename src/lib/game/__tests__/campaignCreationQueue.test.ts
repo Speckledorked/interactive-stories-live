@@ -17,11 +17,13 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/jobs/kickInternalWorker', () => ({ kickInternalWorker: vi.fn() }))
+vi.mock('@/lib/analytics/events', () => ({ recordEvent: vi.fn() }))
 vi.mock('@/lib/templates/campaign-templates', () => ({ getTemplate: vi.fn() }))
 vi.mock('../campaignCreation', () => ({ createCampaign: vi.fn() }))
 
 import { prisma } from '@/lib/prisma'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
+import { recordEvent } from '@/lib/analytics/events'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { createCampaign } from '../campaignCreation'
 import {
@@ -184,6 +186,65 @@ describe('failure', () => {
       where: { id: 'job1' },
       data: expect.objectContaining({ status: 'FAILED', finishedAt: expect.any(Date) }),
     })
+  })
+})
+
+describe('funnel instrumentation (#508)', () => {
+  it('records the world ARRIVING, which the intent event cannot', async () => {
+    // api/campaigns/route.ts records CAMPAIGN_CREATED when the request
+    // comes in, before any world exists. Without this event a world that
+    // never generated and a player who lost interest were the same shape
+    // in the funnel.
+    await processCampaignCreationJob('job1')
+
+    expect(recordEvent).toHaveBeenCalledWith('WORLD_READY', {
+      userId: 'u1',
+      campaignId: 'camp1',
+    })
+  })
+
+  it('carries the campaignId the intent event had to omit', async () => {
+    // The intent event has no campaign to point at — nothing is created
+    // yet — so this is the first joinable row in the funnel.
+    await processCampaignCreationJob('job1')
+
+    const call = (recordEvent as any).mock.calls.find((c: any[]) => c[0] === 'WORLD_READY')
+    expect(call[1].campaignId).toBe('camp1')
+  })
+
+  it('stays silent on a failure that will be retried', async () => {
+    // The job goes back to PENDING and usually succeeds. Recording it
+    // would count every transient model hiccup as somebody who never got
+    // a world, overstating the leak the number exists to measure.
+    db.campaignCreationJob.findUnique.mockResolvedValue(jobRow({ attempts: 1 }))
+    ;(createCampaign as any).mockRejectedValue(new Error('provider down'))
+
+    await processCampaignCreationJob('job1')
+
+    const failures = (recordEvent as any).mock.calls.filter((c: any[]) => c[0] === 'WORLD_FAILED')
+    expect(failures).toEqual([])
+  })
+
+  it('records a permanent failure once the retries are spent', async () => {
+    db.campaignCreationJob.findUnique.mockResolvedValue(jobRow({ attempts: 2 }))
+    ;(createCampaign as any).mockRejectedValue(new Error('provider down'))
+
+    await processCampaignCreationJob('job1')
+
+    expect(recordEvent).toHaveBeenCalledWith(
+      'WORLD_FAILED',
+      expect.objectContaining({ userId: 'u1' })
+    )
+  })
+
+  it('does not record an arrival when creation failed', async () => {
+    db.campaignCreationJob.findUnique.mockResolvedValue(jobRow({ attempts: 2 }))
+    ;(createCampaign as any).mockRejectedValue(new Error('provider down'))
+
+    await processCampaignCreationJob('job1')
+
+    const arrivals = (recordEvent as any).mock.calls.filter((c: any[]) => c[0] === 'WORLD_READY')
+    expect(arrivals).toEqual([])
   })
 })
 

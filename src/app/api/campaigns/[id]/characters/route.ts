@@ -5,6 +5,7 @@ import { getUser } from '@/lib/auth'
 import { validateStats } from '@/lib/game/advancement'
 import { isWorldSeeding, SEEDING_MESSAGE } from '@/lib/lore/seedingGate'
 import { recordEvent } from '@/lib/analytics/events'
+import { normalizeCreationPath } from '@/lib/analytics/creationPath'
 import { getCampaignMembership } from '@/lib/db/campaignAccess'
 import { createCharacter, StartingLoadoutError, StartingLocationError, type CreateCharacterBody } from '@/lib/game/characterCreation'
 
@@ -100,7 +101,19 @@ export async function POST(
 
     const character = await createCharacter(campaignId, user.userId, body)
 
-    await recordEvent('CHARACTER_CREATED', { userId: user.userId, campaignId })
+    // #508: which path they took. Client-reported and normalised to a
+    // closed set — see creationPath.ts on why that is acceptable for this
+    // one field and not for the rest of this body.
+    await recordEvent('CHARACTER_CREATED', {
+      userId: user.userId,
+      campaignId,
+      // Read off the raw body rather than added to CreateCharacterBody:
+      // it is not part of the contract for creating a character, and
+      // putting it there would imply createCharacter consumes it.
+      metadata: {
+        path: normalizeCreationPath((body as { creationPath?: unknown }).creationPath),
+      },
+    })
 
     return NextResponse.json({ character })
   } catch (error) {

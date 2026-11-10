@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getUser } from '@/lib/auth'
 import { isPlatformAdminEmail } from '@/lib/auth/platformAdmin'
 import { prisma } from '@/lib/prisma'
-import { getFunnelCounts, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary, getAICostByDay } from '@/lib/analytics/events'
+import { getFunnelCounts, getWorldCreationLeak, getCreationPathSplit, getSignupsByDay, getRetentionByCohortWeek, getUserCampaignListing, getCampaignCostSummary, getAICostByDay } from '@/lib/analytics/events'
 
 export async function GET(request: NextRequest) {
   const user = await getUser(request)
@@ -19,8 +19,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
-  const [funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts, aiCostByDay] = await Promise.all([
+  const [funnel, worldLeak, creationPaths, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts, aiCostByDay] = await Promise.all([
     getFunnelCounts(),
+    // #508: the two things the funnel alone could not answer — whether a
+    // missing world was our failure, and which creation path people take.
+    getWorldCreationLeak(),
+    getCreationPathSplit(),
     getSignupsByDay(30),
     getRetentionByCohortWeek(8),
     prisma.resolutionJob.findMany({
@@ -40,5 +44,5 @@ export async function GET(request: NextRequest) {
     getAICostByDay(30),
   ])
 
-  return NextResponse.json({ funnel, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts, aiCostByDay })
+  return NextResponse.json({ funnel, worldLeak, creationPaths, signupsByDay, retention, stuckResolutionJobs, stuckLoreJobs, users, campaignCosts, aiCostByDay })
 }

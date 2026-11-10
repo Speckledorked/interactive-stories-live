@@ -27,6 +27,7 @@
 // moving the transaction.
 
 import { prisma } from '@/lib/prisma'
+import { recordEvent } from '@/lib/analytics/events'
 import { kickInternalWorker } from '@/lib/jobs/kickInternalWorker'
 import { getTemplate } from '@/lib/templates/campaign-templates'
 import { createCampaign, type ValidatedLoreImport } from './campaignCreation'
@@ -156,6 +157,12 @@ export async function processCampaignCreationJob(jobId: string): Promise<Process
         lastError: null,
       },
     })
+    // #508: the funnel's arrival step. CAMPAIGN_CREATED fired back when the
+    // request came in, at the point of intent — this is the first evidence
+    // that a world actually exists to play in, and the campaignId makes it
+    // joinable where the intent event (which had no campaign yet) cannot be.
+    await recordEvent('WORLD_READY', { userId: job.userId, campaignId: campaign.id })
+
     console.log(`✅ Campaign creation job ${jobId} completed → ${campaign.id}`)
     return { status: 'completed', campaignId: campaign.id }
   } catch (error) {
@@ -169,6 +176,17 @@ export async function processCampaignCreationJob(jobId: string): Promise<Process
         ...(retryable ? {} : { finishedAt: new Date() }),
       },
     })
+    // Only a PERMANENT failure is recorded. A retryable one is not a lost
+    // player — the job goes back to PENDING and usually succeeds — and
+    // recording it would overstate the leak by counting every transient
+    // model hiccup as somebody who never got a world.
+    if (!retryable) {
+      await recordEvent('WORLD_FAILED', {
+        userId: job.userId,
+        metadata: { attempts: job.attempts, stage: job.stage ?? undefined },
+      })
+    }
+
     console.error(`Campaign creation job ${jobId} failed (attempt ${job.attempts}):`, message)
     return { status: retryable ? 'retry_scheduled' : 'failed', error: message }
   }

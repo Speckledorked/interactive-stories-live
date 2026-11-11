@@ -4061,6 +4061,15 @@ model StateMutation {
 enum AnalyticsEventType {
   SIGNUP
   CAMPAIGN_CREATED
+  // #508: the arrival, where CAMPAIGN_CREATED is only the ask. Creation is
+  // a queued job (#493), so the two are minutes apart and can diverge —
+  // without this, a world that never generated and a player who lost
+  // interest were the same shape in the funnel.
+  WORLD_READY
+  // Permanent failure only; the queue retries first. Deliberately not a
+  // funnel STAGE — a user can fail once and succeed later — so it is
+  // counted as a leak beside the funnel instead.
+  WORLD_FAILED
   CHARACTER_CREATED
   SCENE_STARTED
   ACTION_SUBMITTED

@@ -59,10 +59,13 @@ interface AnalyticsData {
   funnel: {
     signups: number
     campaignsCreated: number
+    worldsReady: number
     charactersCreated: number
     scenesStarted: number
     actionsSubmitted: number
   }
+  worldLeak: { usersAffected: number; usersLeftWithNothing: number }
+  creationPaths: { quick: number; full: number; unspecified: number }
   signupsByDay: Array<{ date: string; count: number }>
   retention: CohortRetention[]
   stuckResolutionJobs: StuckJob[]
@@ -157,12 +160,21 @@ export default function AnalyticsDashboardPage() {
             {/* Funnel */}
             <section>
               <SectionHeader as="h2" title="Activation Funnel" />
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-6 gap-3">
                 <StatTile label="Signed up" value={data.funnel.signups} />
                 <StatTile
-                  label="Created a campaign"
+                  label="Asked for a world"
                   value={data.funnel.campaignsCreated}
                   sublabel={pct(data.funnel.campaignsCreated, data.funnel.signups)}
+                />
+                {/* #508: the stage that separates "we broke" from "they
+                    left". The one before it is recorded at the point of
+                    intent, so without this a world that never generated
+                    looked exactly like a player who lost interest. */}
+                <StatTile
+                  label="Got a world"
+                  value={data.funnel.worldsReady}
+                  sublabel={pct(data.funnel.worldsReady, data.funnel.signups)}
                 />
                 <StatTile
                   label="Created a character"
@@ -178,6 +190,38 @@ export default function AnalyticsDashboardPage() {
                   label="Submitted an action"
                   value={data.funnel.actionsSubmitted}
                   sublabel={pct(data.funnel.actionsSubmitted, data.funnel.signups)}
+                />
+              </div>
+
+              {/* Beside the funnel, not in it: a failure is not a position
+                  everyone passes through, and someone who failed once and
+                  succeeded later is not stuck. Only the second number is
+                  people the product lost outright. */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatTile
+                  label="Hit a creation failure"
+                  value={data.worldLeak.usersAffected}
+                />
+                <StatTile
+                  label="Never got a world at all"
+                  value={data.worldLeak.usersLeftWithNothing}
+                  sublabel={pct(data.worldLeak.usersLeftWithNothing, data.funnel.signups)}
+                />
+              </div>
+            </section>
+
+            {/* #508: which route to a character people actually take.
+                Counts characters rather than users — someone who makes
+                three has chosen a path three times. */}
+            <section>
+              <SectionHeader as="h2" title="How characters get made" />
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatTile label="One step" value={data.creationPaths.quick} />
+                <StatTile label="Full wizard" value={data.creationPaths.full} />
+                <StatTile
+                  label="Unrecorded"
+                  value={data.creationPaths.unspecified}
+                  sublabel="before this was tracked"
                 />
               </div>
             </section>
